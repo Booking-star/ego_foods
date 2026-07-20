@@ -75,6 +75,18 @@ create table if not exists dinein_sales (
   logged_at timestamptz default now()
 );
 
+create table if not exists restaurants (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone text,
+  google_maps_url text,
+  upi_id text,
+  is_open boolean default true,
+  closed_message text,
+  whatsapp_access_token_override text,
+  created_at timestamptz default now()
+);
+
 create table if not exists recurring_expenses (
   id uuid primary key default gen_random_uuid(),
   description text not null,
