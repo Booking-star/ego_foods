@@ -1,5 +1,6 @@
 import electron from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import isDev from 'electron-is-dev';
 import { SwiggyImporter } from './swiggyImporter.js';
@@ -13,19 +14,33 @@ const swiggyImporter = new SwiggyImporter();
 let swiggyAutoTimer = null;
 const defaultCustomerPrinterName = 'POS-58-Series';
 
+// Read VITE_KITCHEN_API_URL and VITE_KITCHEN_API_TOKEN from .env file
+let configEnv = {};
+try {
+  const envContent = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf8');
+  envContent.split('\n').forEach((line) => {
+    const [key, ...valueParts] = line.split('=');
+    if (key && valueParts.length > 0) {
+      configEnv[key.trim()] = valueParts.join('=').trim();
+    }
+  });
+} catch (e) {
+  console.warn("Could not read .env file:", e);
+}
+
+const apiUrl = configEnv.VITE_KITCHEN_API_URL || 'https://ego-foods-bot.vercel.app';
+const apiToken = configEnv.VITE_KITCHEN_API_TOKEN || 'sHUfelbnXs8N-zTc7NvkVZgDY5vAN4xKFE4Q7qjsu7Q';
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
-  app.quit();
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
 }
-
-app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
-
-app.on('second-instance', () => {
-  if (!mainWindow) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.focus();
-});
 
 function scheduleSwiggyImport(settings) {
   if (swiggyAutoTimer) {
@@ -147,11 +162,15 @@ async function printHtml(html, deviceName) {
 
 function registerPrinterIpc() {
   ipcMain.handle('printer:list', async () => mainWindow?.webContents.getPrintersAsync() || []);
-  ipcMain.handle('printer:print-order-copies', async (_event, order, printers = {}) => {
-    const customerPrinter = printers.customerPrinterName || defaultCustomerPrinterName;
-    const kitchenPrinter = printers.kitchenPrinterName || customerPrinter;
-    await printHtml(customerReceiptHtml(order || {}), customerPrinter);
-    await printHtml(kitchenReceiptHtml(order || {}), kitchenPrinter);
+  ipcMain.handle('printer:print-order-copies', async (_event, order, options = {}) => {
+    const customerPrinter = options.customerPrinterName || defaultCustomerPrinterName;
+    const kitchenPrinter = options.kitchenPrinterName || customerPrinter;
+    if (options.printCustomer !== false) {
+      await printHtml(customerReceiptHtml(order || {}), customerPrinter);
+    }
+    if (options.printKitchen !== false) {
+      await printHtml(kitchenReceiptHtml(order || {}), kitchenPrinter);
+    }
     return { ok: true, customerPrinter, kitchenPrinter };
   });
 }
@@ -173,18 +192,65 @@ function createWindow() {
     }
   });
 
-  if (isDev) {
-    mainWindow.loadURL('http://127.0.0.1:5173');
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
-  }
+  const distHtml = path.join(__dirname, '..', 'dist', 'index.html');
+  mainWindow.loadFile(distHtml);
+  // mainWindow.webContents.openDevTools();
 }
+
+async function startPrintJobPolling() {
+  const targetUrl = isDev ? 'http://127.0.0.1:3000' : apiUrl;
+  
+  setInterval(async () => {
+    try {
+      const res = await fetch(`${targetUrl.replace(/\/$/, '')}/api/kitchen-os/print-jobs`, {
+        headers: { 'x-kitchen-token': apiToken }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const jobs = data.jobs || [];
+      
+      for (const job of jobs) {
+        const { id, printer_type, content } = job;
+        const customerPrinter = defaultCustomerPrinterName;
+        
+        if (printer_type === 'kitchen') {
+          await printHtml(kitchenReceiptHtml(content), customerPrinter);
+        } else {
+          await printHtml(customerReceiptHtml(content), customerPrinter);
+        }
+        
+        // Mark job as completed
+        await fetch(`${targetUrl.replace(/\/$/, '')}/api/kitchen-os/print-jobs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-kitchen-token': apiToken
+          },
+          body: JSON.stringify({ jobId: id, status: 'completed' })
+        });
+      }
+    } catch (err) {
+      // Ignore network errors when dashboard is reloading
+    }
+  }, 3000);
+}
+
+ipcMain.on('log-to-file', (event, msg) => {
+  try {
+    const logPath = path.join(__dirname, '..', 'client_debug.log');
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`, 'utf8');
+  } catch (err) {
+    console.error("Failed to write to client_debug.log:", err);
+  }
+});
+
 
 app.whenReady().then(async () => {
   registerSwiggyIpc();
   registerPrinterIpc();
   scheduleSwiggyImport(await swiggyImporter.getSettings());
   createWindow();
+  startPrintJobPolling();
 });
 
 app.on('window-all-closed', () => {

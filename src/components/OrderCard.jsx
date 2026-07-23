@@ -47,9 +47,12 @@ export default function OrderCard({
   const isPaidNew = (order.status === 'new' || order.status === 'payment_pending') && order.payment_confirmed;
   const primaryLabel = isPaidNew ? 'Accept' : action?.[0];
   const primaryStatus = isPaidNew ? 'preparing' : action?.[1];
+  const ageMinutes = dayjs().diff(dayjs(order.created_at), 'minute');
+  const isEscalatedPending = (order.status === 'new' || order.status === 'payment_pending') && order.payment_confirmed && ageMinutes >= 5;
+  const isPrepOverrun = order.status === 'preparing' && ageMinutes >= 15;
   const needsScreenshotView = Boolean(order.payment_screenshot_url) && !viewedScreenshots[order.id] && !order.payment_confirmed;
   const itemLine = (order.items || []).map((item) => `${item.name} ${item.variant || ''} x${item.qty || item.quantity || 1}`.trim()).join(', ');
-  const isPulsing = alarmOrderIds.has(order.id) || isPaidNew;
+  const isPulsing = alarmOrderIds.has(order.id) || isEscalatedPending || isPrepOverrun;
   const sourceLabel = order.source === 'swiggy' ? 'Swiggy' : order.source === 'counter' ? 'Counter' : 'WhatsApp';
 
   async function handleAction() {
@@ -122,41 +125,78 @@ export default function OrderCard({
             <span className="shrink-0 text-[12px] font-semibold text-text-muted">{timeLabel(order.created_at)}</span>
           </div>
 
-          <div className="min-h-[116px]">
-            <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-h-[110px]">
+            <div className="mb-2 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-[16px] font-black text-text-dark">{order.customer_name || 'Walk-in Customer'}</p>
-                <p className="mt-1 text-[12px] font-bold text-success">{sourceLabel}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="text-[12px] font-bold text-success">{sourceLabel}</span>
+                  <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-black ${order.payment_confirmed ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                    {order.payment_confirmed ? 'PAID VIA RAZORPAY' : 'PAYMENT PENDING'}
+                  </span>
+                  {isEscalatedPending ? (
+                    <span className="inline-block rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-black text-white animate-pulse">
+                      ⚠️ OVERDUE (&gt;5m)
+                    </span>
+                  ) : null}
+                  {isPrepOverrun ? (
+                    <span className="inline-block rounded bg-amber-600 px-1.5 py-0.5 text-[10px] font-black text-white animate-pulse">
+                      ⏰ PREP OVERRUN (&gt;15m)
+                    </span>
+                  ) : null}
+                </div>
               </div>
-              <p className="shrink-0 text-[15px] font-black text-[#6f3513]">{formatINR(order.total_amount || order.total || 0)}</p>
+              <p className="shrink-0 text-[16px] font-black text-[#6f3513]">{formatINR(order.total_amount || order.total || 0)}</p>
             </div>
-            <p className="line-clamp-3 text-[14px] font-semibold leading-5 text-text-dark">{itemLine || 'No items listed'}</p>
+            
+            <div className="mt-3 space-y-1 rounded border border-[#f0e4db] bg-[#fffcf9] p-2.5">
+              {(order.items || []).length > 0 ? (
+                order.items.map((item, idx) => (
+                  <div key={idx} className="flex justify-between text-[13px] font-bold text-text-dark">
+                    <span>{item.name} {item.variant ? `(${item.variant})` : ''}</span>
+                    <span className="font-extrabold text-primary">x{item.qty || item.quantity || 1}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-[13px] font-semibold text-text-muted">No items listed</p>
+              )}
+            </div>
             <p className="mt-2 text-[12px] font-semibold italic text-text-muted">
-              {order.payment_confirmed ? 'Payment confirmed. Alarm rings until Accept or Reject.' : 'Payment pending.'}
+              {order.status === 'new' || order.status === 'payment_pending'
+                ? (order.payment_confirmed ? 'Payment confirmed. Alarm rings until Accept or Reject.' : 'Payment pending.')
+                : order.status === 'preparing'
+                  ? 'Order is currently being prepared in kitchen.'
+                  : order.status === 'ready'
+                    ? 'Order is ready for pickup!'
+                    : 'Order completed.'}
             </p>
           </div>
 
           <div className="mt-3 border-t border-[#eadfd7] pt-3">
-            <div className="mb-3 flex justify-between text-[12px] font-black uppercase text-text-muted">
-              <span>Total Amount</span>
-              <span className="text-text-dark">{formatINR(order.total_amount || order.total || 0)}</span>
-            </div>
             <div className="grid grid-cols-2 gap-2">
               {isPaidNew ? (
-                <button type="button" disabled={loading} onClick={(event) => { event.stopPropagation(); setRejectOpen((value) => !value); }} className="min-h-10 rounded-sm border border-text-dark text-[12px] font-black text-text-dark disabled:text-text-muted">
-                  Reject
+                <button type="button" disabled={loading} onClick={(event) => { event.stopPropagation(); setRejectOpen((value) => !value); }} className="min-h-11 rounded border border-danger text-[13px] font-black text-danger hover:bg-red-50 disabled:text-text-muted">
+                  Reject Order
                 </button>
               ) : (
-                <button type="button" onClick={(event) => { event.stopPropagation(); setExpanded((value) => !value); }} className="min-h-10 rounded-sm border border-[#eadfd7] text-[12px] font-black text-text-dark">
-                  {expanded ? 'Collapse' : 'Details'}
+                <button type="button" onClick={(event) => { event.stopPropagation(); setExpanded((value) => !value); }} className="min-h-11 rounded border border-[#eadfd7] text-[13px] font-black text-text-dark hover:bg-gray-50">
+                  {expanded ? 'Collapse' : 'Order Details'}
                 </button>
               )}
               {primaryStatus ? (
-                <button type="button" disabled={loading} onClick={(event) => { event.stopPropagation(); handleAction(); }} className="inline-flex min-h-10 items-center justify-center gap-1 rounded-sm bg-primary px-3 text-[12px] font-black text-white disabled:bg-text-muted">
-                  <CheckCircle2 size={15} /> {loading ? 'Saving...' : primaryLabel}
+                <button type="button" disabled={loading} onClick={(event) => { event.stopPropagation(); handleAction(); }} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded bg-success px-3 text-[13px] font-black text-white hover:bg-green-700 disabled:bg-text-muted shadow-sm">
+                  <CheckCircle2 size={16} /> {loading ? 'Saving...' : primaryLabel}
+                </button>
+              ) : order.status === 'preparing' ? (
+                <button type="button" disabled={loading} onClick={(event) => { event.stopPropagation(); updateOrderStatus(order.id, 'ready'); }} className="min-h-11 rounded bg-amber-600 px-3 text-[13px] font-black text-white hover:bg-amber-700 shadow-sm">
+                  {loading ? 'Saving...' : 'Mark Ready 📦'}
+                </button>
+              ) : order.status === 'ready' ? (
+                <button type="button" disabled={loading} onClick={(event) => { event.stopPropagation(); updateOrderStatus(order.id, 'completed').then(() => onCompleted?.(order)); }} className="min-h-11 rounded bg-emerald-600 px-3 text-[13px] font-black text-white hover:bg-emerald-700 shadow-sm">
+                  {loading ? 'Saving...' : 'Mark Picked Up ✅'}
                 </button>
               ) : (
-                <button type="button" onClick={(event) => { event.stopPropagation(); setExpanded((value) => !value); }} className="min-h-10 rounded-sm bg-[#f7f1ec] px-3 text-[12px] font-black text-text-dark">
+                <button type="button" onClick={(event) => { event.stopPropagation(); setExpanded((value) => !value); }} className="min-h-11 rounded bg-[#f7f1ec] px-3 text-[13px] font-black text-text-dark">
                   View
                 </button>
               )}

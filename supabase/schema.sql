@@ -50,6 +50,7 @@ create table if not exists orders (
   payment_screenshot_url text,
   payment_confirmed boolean default false,
   pickup_code text not null,
+  pickup_otp text,
   source text default 'whatsapp',
   created_at timestamptz default now(),
   updated_at timestamptz default now()

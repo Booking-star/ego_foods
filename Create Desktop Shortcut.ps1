@@ -10,7 +10,7 @@ $shortcut.TargetPath = $targetPath
 $shortcut.Arguments = "`"$launcherPath`""
 $shortcut.WorkingDirectory = $projectDir
 $shortcut.WindowStyle = 7
-$shortcut.Description = 'Launch Kitchen OS dashboard'
+$shortcut.IconLocation = Join-Path $projectDir 'public\logo.ico'
 $shortcut.Save()
 
 Write-Host "Created shortcut: $shortcutPath"

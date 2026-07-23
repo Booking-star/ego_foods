@@ -17,6 +17,7 @@ export default function MenuSetup() {
   const recipes = useInventoryStore((state) => state.recipes);
   const externalMappings = useInventoryStore((state) => state.externalMappings);
   const addMenuItem = useInventoryStore((state) => state.addMenuItem);
+  const addIngredient = useInventoryStore((state) => state.addIngredient);
   const updateMenuItem = useInventoryStore((state) => state.updateMenuItem);
   const updatePortions = useInventoryStore((state) => state.updatePortions);
   const replaceRecipesForMenu = useInventoryStore((state) => state.replaceRecipesForMenu);
@@ -24,13 +25,16 @@ export default function MenuSetup() {
   const setTab = useAppStore((state) => state.setTab);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState(menuItems[0]?.id || '');
   const [addingMenu, setAddingMenu] = useState(false);
+  const [addingIngredient, setAddingIngredient] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState(false);
   const [editingPortions, setEditingPortions] = useState(false);
   const [mappingOpen, setMappingOpen] = useState(false);
   const [mappingError, setMappingError] = useState('');
   const [notice, setNotice] = useState('');
+  const [showAllMappings, setShowAllMappings] = useState(true);
   const [menuDraft, setMenuDraft] = useState({ name: '', category: 'biryani', recipe_base_quantity: 1, recipe_base_unit: 'kg' });
   const [recipeBaseDraft, setRecipeBaseDraft] = useState({ quantity: 1, unit: 'kg' });
+  const [ingredientDraft, setIngredientDraft] = useState({ name: '', unit: 'kg', current_stock: '', low_stock_threshold: '' });
   const menuItem = menuItems.find((item) => item.id === selectedMenuItemId) || menuItems[0];
   const itemPortions = portions.filter((portion) => portion.menu_item_id === menuItem?.id);
   const itemRecipes = recipes.filter((recipe) => recipe.menu_item_id === menuItem?.id);
@@ -41,7 +45,29 @@ export default function MenuSetup() {
     portion_id: itemPortions[0]?.id || ''
   });
 
-  const swiggyMappings = externalMappings.filter((mapping) => mapping.source === 'swiggy');
+  async function saveIngredient() {
+    if (!ingredientDraft.name.trim()) {
+      setNotice('Enter an ingredient name.');
+      return;
+    }
+    const res = await addIngredient({
+      name: ingredientDraft.name.trim(),
+      unit: ingredientDraft.unit,
+      current_stock: Number(ingredientDraft.current_stock || 0),
+      low_stock_threshold: Number(ingredientDraft.low_stock_threshold || 0)
+    });
+    if (res.ok) {
+      setAddingIngredient(false);
+      setIngredientDraft({ name: '', unit: 'kg', current_stock: '', low_stock_threshold: '' });
+      setNotice('Ingredient added successfully!');
+    } else {
+      setNotice(`Failed to add ingredient: ${res.message}`);
+    }
+  }
+
+  const swiggyMappings = externalMappings.filter(
+    (mapping) => mapping.source === 'swiggy' && (showAllMappings || mapping.menu_item_id === menuItem?.id)
+  );
   const recipeBase = useMemo(() => ({
     quantity: Number(menuItem?.recipe_base_quantity || itemRecipes[0]?.base_quantity || 1),
     unit: menuItem?.recipe_base_unit || itemRecipes[0]?.base_unit || 'kg'
@@ -139,7 +165,7 @@ export default function MenuSetup() {
   }
 
   return (
-    <section className="h-full overflow-y-auto bg-bg-secondary p-4 scrollbar-none lg:p-6">
+    <section className="h-full w-full overflow-y-auto bg-bg-secondary p-4 lg:p-6">
       <header className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-black text-text-dark">Menu & Recipe</h1>
@@ -167,7 +193,7 @@ export default function MenuSetup() {
         </label>
       </div>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-2">
+      <div className="mt-5 grid gap-5 xl:grid-cols-3">
         <Panel title="Portions" action="Edit Portions" onAction={openPortionEditor}>
           {itemPortions.map((portion) => (
             <div key={portion.id} className="grid grid-cols-[1fr_90px_110px] gap-3 border-b border-border py-3 text-base font-bold text-text-dark last:border-b-0">
@@ -190,21 +216,41 @@ export default function MenuSetup() {
             );
           })}
         </Panel>
+
+        <Panel title="Raw Ingredients" action="Add Ingredient" onAction={() => setAddingIngredient(true)}>
+          <div className="max-h-60 overflow-y-auto divide-y divide-border pr-1">
+            {ingredients.length === 0 ? (
+              <p className="py-6 text-sm font-semibold text-text-muted text-center">No ingredients yet.</p>
+            ) : (
+              ingredients.map((ingredient) => (
+                <div key={ingredient.id} className="flex justify-between py-2.5 text-base font-bold text-text-dark last:border-b-0">
+                  <span>{ingredient.name}</span>
+                  <span className="text-text-muted">{ingredient.current_stock} {ingredient.unit}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </Panel>
       </div>
 
       <div className="mt-5 rounded-lg border border-border bg-bg p-4 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-black text-text-dark">Swiggy Mapping</h2>
+            <h2 className="text-lg font-black text-text-dark">Swiggy Mapping ({swiggyMappings.length} Items)</h2>
             <p className="mt-1 text-[15px] font-semibold text-text-muted">Map each Swiggy item name once to a Kitchen OS portion.</p>
           </div>
-          <button type="button" onClick={() => {
-            setMappingDraft((draft) => ({ ...draft, portion_id: draft.portion_id || itemPortions[0]?.id || '' }));
-            setMappingError('');
-            setMappingOpen(true);
-          }} className="inline-flex h-11 items-center gap-2 rounded-lg border border-border px-4 text-base font-black text-text-dark">
-            <Plus size={18} /> Map Item
-          </button>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setShowAllMappings((value) => !value)} className="inline-flex h-11 items-center gap-2 rounded-lg border border-border px-3 text-[13px] font-black text-text-dark">
+              {showAllMappings ? 'Showing All Items' : 'Showing Selected Item Only'}
+            </button>
+            <button type="button" onClick={() => {
+              setMappingDraft((draft) => ({ ...draft, portion_id: draft.portion_id || itemPortions[0]?.id || '' }));
+              setMappingError('');
+              setMappingOpen(true);
+            }} className="inline-flex h-11 items-center gap-2 rounded-lg border border-border px-4 text-base font-black text-text-dark">
+              <Plus size={18} /> Map Item
+            </button>
+          </div>
         </div>
         <div className="mt-3 divide-y divide-border">
           {swiggyMappings.map((mapping) => {
@@ -318,6 +364,58 @@ export default function MenuSetup() {
         </Modal>
       ) : null}
 
+      {addingIngredient ? (
+        <Modal
+          title="Add Raw Ingredient"
+          onClose={() => setAddingIngredient(false)}
+          footer={<ModalActions onCancel={() => setAddingIngredient(false)} onSave={saveIngredient} />}
+        >
+          <label className="block text-base font-bold text-text-dark">
+            Ingredient name
+            <input
+              value={ingredientDraft.name}
+              onChange={(event) => setIngredientDraft({ ...ingredientDraft, name: event.target.value })}
+              className="mt-2 h-12 w-full rounded-lg border border-border px-3 text-base font-bold outline-none focus:border-primary"
+              placeholder="e.g. Basmati Rice, Chicken, Onions"
+            />
+          </label>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <label className="block text-base font-bold text-text-dark">
+              Initial Stock Qty
+              <input
+                type="number"
+                value={ingredientDraft.current_stock}
+                onChange={(event) => setIngredientDraft({ ...ingredientDraft, current_stock: event.target.value })}
+                className="mt-2 h-12 w-full rounded-lg border border-border px-3 text-base font-bold outline-none focus:border-primary"
+                placeholder="0"
+              />
+            </label>
+            <label className="block text-base font-bold text-text-dark">
+              Unit
+              <select
+                value={ingredientDraft.unit}
+                onChange={(event) => setIngredientDraft({ ...ingredientDraft, unit: event.target.value })}
+                className="mt-2 h-12 w-full rounded-lg border border-border px-3 text-base font-bold outline-none focus:border-primary"
+              >
+                {unitOptions.map((unit) => (
+                  <option key={unit} value={unit}>{unit}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label className="mt-3 block text-base font-bold text-text-dark">
+            Low Stock Alert Threshold
+            <input
+              type="number"
+              value={ingredientDraft.low_stock_threshold}
+              onChange={(event) => setIngredientDraft({ ...ingredientDraft, low_stock_threshold: event.target.value })}
+              className="mt-2 h-12 w-full rounded-lg border border-border px-3 text-base font-bold outline-none focus:border-primary"
+              placeholder="0"
+            />
+          </label>
+        </Modal>
+      ) : null}
+
       {mappingOpen ? (
         <Modal
           title="Map Swiggy Item"
@@ -328,12 +426,16 @@ export default function MenuSetup() {
             Swiggy item name
             <input value={mappingDraft.external_item_name} onChange={(event) => { setMappingError(''); setMappingDraft({ ...mappingDraft, external_item_name: event.target.value }); }} className="mt-2 h-12 w-full rounded-lg border border-border px-3 text-base font-bold" placeholder="Chicken Fry Piece Palav SINGLE" />
           </label>
-          <label className="mt-4 block text-base font-bold text-text-dark">
-            Kitchen OS portion
             <select value={mappingDraft.portion_id} onChange={(event) => setMappingDraft({ ...mappingDraft, portion_id: event.target.value })} className="mt-2 h-12 w-full rounded-lg border border-border px-3 text-base font-bold">
-              {itemPortions.map((portion) => <option key={portion.id} value={portion.id}>{portion.name} - {portion.grams}g</option>)}
+              {portions.map((portion) => {
+                const item = menuItems.find((m) => m.id === portion.menu_item_id);
+                return (
+                  <option key={portion.id} value={portion.id}>
+                    {item?.name || 'Menu Item'} - {portion.name} ({portion.grams}g)
+                  </option>
+                );
+              })}
             </select>
-          </label>
           {mappingError ? <p className="mt-3 rounded-lg border border-danger bg-red-50 p-3 text-[15px] font-bold text-danger">{mappingError}</p> : null}
         </Modal>
       ) : null}

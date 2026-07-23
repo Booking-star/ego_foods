@@ -1,14 +1,4 @@
 @echo off
-setlocal
-cd /d "%~dp0"
-title Kitchen OS - Ego Foods
-
-if not exist node_modules (
-  echo Installing Kitchen OS dependencies...
-  call npm install
-)
-
-echo Starting Kitchen OS dashboard...
-call npm run electron:dev
-
-pause
+cd /d "C:\Users\Kandr\Documents\Codex\2026-07-04\kitchen-os-master-build-prompt-for"
+taskkill /f /im electron.exe >nul 2>&1
+start "" node_modules\electron\dist\electron.exe .

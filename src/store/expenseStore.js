@@ -10,7 +10,7 @@ export const useExpenseStore = create((set, get) => ({
   expenses: readLocal(expenseKey, sampleExpenses),
   addExpense: async (expense) => {
     const row = {
-      id: uid('expense'),
+      id: crypto.randomUUID?.() || uid('expense'),
       date: todayISO(),
       logged_at: new Date().toISOString(),
       ...expense,

@@ -11,14 +11,35 @@ import { useState } from 'react';
 
 export default function DailySummary() {
   const [mode, setMode] = useState('today');
-  const whatsapp = useOrderStore((state) => state.paidTodayTotal());
-  const orderCount = useOrderStore((state) => state.orders.filter((order) => order.status === 'completed' && order.payment_confirmed).length);
-  const dineIn = useCashStore((state) => state.totalToday());
+  const todayOrders = useOrderStore((state) => state.orders).filter(
+    (order) => order.status === 'completed' && order.payment_confirmed && String(order.date || order.created_at || '').slice(0, 10) === todayISO()
+  );
+
+  const whatsapp = todayOrders
+    .filter((order) => order.source === 'whatsapp')
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+
+  const swiggy = todayOrders
+    .filter((order) => order.source === 'swiggy')
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+
+  const takeaway = todayOrders
+    .filter((order) => order.source === 'counter' && order.order_type === 'takeaway')
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+
+  const dineInPOS = todayOrders
+    .filter((order) => order.source === 'counter' && order.order_type === 'dine_in')
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+
+  const dineInManual = useCashStore((state) => state.totalToday());
+  const dineIn = dineInPOS + dineInManual;
+
+  const orderCount = todayOrders.length;
   const expenseTotal = useExpenseStore((state) => state.totalToday());
   const expenseCount = useExpenseStore((state) => state.expenses.filter((expense) => expense.date === todayISO()).length);
   const menuItems = useInventoryStore((state) => state.menuItems);
   const batchLogs = useInventoryStore((state) => state.batchLogs);
-  const sales = whatsapp + dineIn;
+  const sales = whatsapp + swiggy + takeaway + dineIn;
   const profit = sales - expenseTotal;
   const todayBatches = batchLogs.filter((batch) => batch.date === todayISO());
   const cooked = todayBatches.reduce((sum, batch) => sum + Number(batch.kg_cooked || 0), 0);
@@ -28,7 +49,9 @@ export default function DailySummary() {
   const plates = menuItems[0]?.portion_full_grams ? Math.round((sold * 1000) / menuItems[0].portion_full_grams) : 0;
   const hasData = sales || expenseTotal || cooked;
   const salesBreakdown = [
-    { name: 'WhatsApp Takeaway', value: whatsapp, fill: '#FC8019' },
+    { name: 'WhatsApp', value: whatsapp, fill: '#FC8019' },
+    { name: 'Swiggy', value: swiggy, fill: '#FF5050' },
+    { name: 'Counter Pickup', value: takeaway, fill: '#FFCC00' },
     { name: 'Dine-in', value: dineIn, fill: '#60B246' }
   ];
   const week = Array.from({ length: 7 }, (_, index) => {

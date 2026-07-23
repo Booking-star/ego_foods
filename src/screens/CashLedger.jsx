@@ -2,14 +2,35 @@ import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import EmptyState from '../components/EmptyState';
 import Modal from '../components/Modal';
-import { formatINR } from '../lib/format';
+import { formatINR, todayISO } from '../lib/format';
 import { useCashStore } from '../store/cashStore';
 import { useExpenseStore } from '../store/expenseStore';
 import { useOrderStore } from '../store/orderStore';
 
 export default function CashLedger() {
-  const whatsapp = useOrderStore((state) => state.paidTodayTotal());
-  const dineIn = useCashStore((state) => state.totalToday());
+  const todayOrders = useOrderStore((state) => state.orders).filter(
+    (order) => order.status === 'completed' && order.payment_confirmed && String(order.date || order.created_at || '').slice(0, 10) === todayISO()
+  );
+
+  const whatsapp = todayOrders
+    .filter((order) => order.source === 'whatsapp')
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+
+  const swiggy = todayOrders
+    .filter((order) => order.source === 'swiggy')
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+
+  const takeaway = todayOrders
+    .filter((order) => order.source === 'counter' && order.order_type === 'takeaway')
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+
+  const dineInPOS = todayOrders
+    .filter((order) => order.source === 'counter' && order.order_type === 'dine_in')
+    .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
+
+  const dineInManual = useCashStore((state) => state.totalToday());
+  const dineIn = dineInPOS + dineInManual;
+
   const addDineInSale = useCashStore((state) => state.addDineInSale);
   const expenses = useExpenseStore((state) => state.expenses);
   const expenseTotal = useExpenseStore((state) => state.totalToday());
@@ -17,7 +38,7 @@ export default function CashLedger() {
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
-  const totalIn = whatsapp + dineIn;
+  const totalIn = whatsapp + swiggy + takeaway + dineIn;
   const cash = totalIn - expenseTotal;
   const market = expenses.filter((expense) => expense.type === 'market_purchase').reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const other = expenseTotal - market;
@@ -52,12 +73,14 @@ export default function CashLedger() {
       <div className="rounded-sm border border-[#eadfd7] bg-white p-5 text-center shadow-card">
         <p className="text-[14px] font-black text-text-muted">CASH IN HAND RIGHT NOW</p>
         <p className="mt-2 text-4xl font-black text-text-dark">{formatINR(cash)}</p>
-        <p className="mt-2 text-[15px] font-semibold text-text-muted">= WhatsApp Sales + Dine-in - Expenses</p>
+        <p className="mt-2 text-[15px] font-semibold text-text-muted">= WhatsApp + Swiggy + Counter Pickup + Dine-in - Expenses</p>
       </div>
 
       <div className="mt-4 rounded-sm border border-[#eadfd7] bg-white p-4 shadow-card">
         <h2 className="text-[14px] font-black text-text-muted">TODAY'S FLOW</h2>
         <FlowLine label="WhatsApp Orders" value={whatsapp} />
+        <FlowLine label="Swiggy Orders" value={swiggy} />
+        <FlowLine label="Counter Pickup" value={takeaway} />
         <FlowLine label="Dine-in Sales" value={dineIn} />
         <FlowLine label="Total In" value={totalIn} strong />
         <div className="my-3 border-t border-border" />

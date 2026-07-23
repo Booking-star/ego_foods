@@ -15,7 +15,7 @@ import {
   UtensilsCrossed,
   Wifi
 } from 'lucide-react';
-import { startAlarm } from './lib/audio';
+import { startAlarm, unlockAudio } from './lib/audio';
 import { applyExternalMappingsToOrders, orderPortionKgByMenu } from './lib/business';
 import { fetchKitchenOrders, fetchKitchenSettings, hasKitchenApi, updateKitchenSettings } from './lib/kitchenApi';
 import { importSwiggyNow, onSwiggyProgress } from './lib/swiggyBridge';
@@ -53,15 +53,15 @@ const screens = {
 };
 
 const navItems = [
-  { id: 'orders', label: 'Orders', icon: ClipboardList },
-  { id: 'menu', label: 'Menu & Recipes', icon: UtensilsCrossed },
-  { id: 'inventory', label: 'Inventory', icon: Boxes },
-  { id: 'swiggy', label: 'Swiggy Import', icon: Wifi },
-  { id: 'sales', label: 'Sales', icon: ShoppingBag },
-  { id: 'cash', label: 'Cash', icon: IndianRupee },
-  { id: 'summary', label: 'Summary', icon: ChartColumn },
-  { id: 'expenses', label: 'Expenses', icon: ReceiptText },
-  { id: 'settings', label: 'Settings', icon: Settings }
+  { id: 'orders', label: 'Orders', icon: ClipboardList, roles: ['owner', 'waiter'] },
+  { id: 'counter', label: 'Counter Sales', icon: Store, roles: ['owner', 'waiter'] },
+  { id: 'menu', label: 'Menu & Recipes', icon: UtensilsCrossed, roles: ['owner'] },
+  { id: 'inventory', label: 'Inventory', icon: Boxes, roles: ['owner'] },
+  { id: 'swiggy', label: 'Swiggy Import', icon: Wifi, roles: ['owner'] },
+  { id: 'sales', label: 'Sales & Cash', icon: ShoppingBag, roles: ['owner'] },
+  { id: 'summary', label: 'Summary', icon: ChartColumn, roles: ['owner'] },
+  { id: 'expenses', label: 'Expenses', icon: ReceiptText, roles: ['owner'] },
+  { id: 'settings', label: 'Settings', icon: Settings, roles: ['owner'] }
 ];
 
 const titleByTab = {
@@ -80,9 +80,23 @@ const titleByTab = {
 const closedMessage = 'Orders are currently not being taken. If we resume in some time, we will update you.';
 
 export default function App() {
+  const isElectron = typeof window !== 'undefined' && (Boolean(window.kitchenOS) || navigator.userAgent.toLowerCase().includes('electron'));
   const tab = useAppStore((state) => state.tab);
   const setTab = useAppStore((state) => state.setTab);
   const whatsappOpen = useAppStore((state) => state.whatsappOpen);
+  const [currentUser, setCurrentUser] = useState(() => {
+    if (isElectron) return 'owner';
+    return localStorage.getItem('kitchen-os.user-role') || null;
+  });
+
+  useEffect(() => {
+    window.addEventListener('click', unlockAudio, { once: true });
+    window.addEventListener('keydown', unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener('click', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+    };
+  }, []);
   const setWhatsappOpen = useAppStore((state) => state.setWhatsappOpen);
   const printerOnline = useAppStore((state) => state.printerOnline);
   const setPrinterOnline = useAppStore((state) => state.setPrinterOnline);
@@ -160,35 +174,85 @@ export default function App() {
         mergeImportedOrders(applySwiggyMappings(payload.importedOrders || []));
       }
       if (hasKitchenApi) {
-        await fetchKitchenSettings()
+        fetchKitchenSettings()
           .then((settings) => {
             setWhatsappOpen(Boolean(settings.is_open));
             setRemoteLicense(settings.license || { active: true, message: '' });
+            if (!supabase && Array.isArray(settings.menu_items) && settings.menu_items.length > 0) {
+              useInventoryStore.setState({ menuItems: settings.menu_items });
+            }
           })
           .catch(() => {});
       }
-      await loadKitchenOrders().catch(() => setNotice('WhatsApp order sync is not reachable.'));
-      if (!supabase) return;
-      const [orders, menuItems, ingredients, recipes, batchLogs, expenses, dineInSales] = await Promise.all([
-        supabase.from('orders').select('*').order('created_at', { ascending: false }),
-        supabase.from('menu_items').select('*').order('created_at', { ascending: true }),
-        supabase.from('ingredients').select('*').order('created_at', { ascending: true }),
-        supabase.from('recipes').select('*'),
-        supabase.from('batch_logs').select('*').order('logged_at', { ascending: false }),
-        supabase.from('expenses').select('*').order('logged_at', { ascending: false }),
-        supabase.from('dinein_sales').select('*').order('logged_at', { ascending: false })
-      ]);
-      if (!orders.error && orders.data?.length) setOrders(orders.data);
-      if (!menuItems.error && !ingredients.error && !recipes.error && !batchLogs.error) {
-        setInventory({
-          menuItems: menuItems.data?.length ? menuItems.data : sampleMenuItems,
-          ingredients: ingredients.data?.length ? ingredients.data : sampleIngredients,
-          recipes: recipes.data?.length ? recipes.data : sampleRecipes,
-          batchLogs: batchLogs.data?.length ? batchLogs.data : sampleBatchLogs
-        });
+      loadKitchenOrders().catch(() => setNotice('WhatsApp order sync is not reachable.'));
+      if (!supabase) {
+        setNotice('Supabase client is not initialized.');
+        return;
       }
-      if (!expenses.error && expenses.data) useExpenseStore.setState({ expenses: expenses.data });
-      if (!dineInSales.error && dineInSales.data) useCashStore.setState({ dineInSales: dineInSales.data });
+      try {
+        const [orders, menuItems, ingredients, recipes, batchLogs, expenses, dineInSales, portions] = await Promise.all([
+          supabase.from('orders').select('*').order('created_at', { ascending: false }),
+          supabase.from('menu_items').select('*').order('sort_order', { ascending: true }),
+          supabase.from('ingredients').select('*').order('created_at', { ascending: true }),
+          supabase.from('recipes').select('*'),
+          supabase.from('batch_logs').select('*').order('logged_at', { ascending: false }),
+          supabase.from('expenses').select('*').order('logged_at', { ascending: false }),
+          supabase.from('dinein_sales').select('*').order('logged_at', { ascending: false }),
+          supabase.from('portions').select('*')
+        ]);
+        
+        if (orders.error) {
+          console.error('Supabase orders load error:', orders.error.message);
+          window.kitchenOS?.logToFile('Supabase orders error: ' + orders.error.message);
+        }
+        if (menuItems.error) {
+          console.error('Supabase menuItems load error:', menuItems.error.message);
+          window.kitchenOS?.logToFile('Supabase menuItems error: ' + menuItems.error.message);
+        }
+        if (ingredients.error) {
+          console.error('Supabase ingredients load error:', ingredients.error.message);
+          window.kitchenOS?.logToFile('Supabase ingredients error: ' + ingredients.error.message);
+        }
+        if (recipes.error) {
+          console.error('Supabase recipes load error:', recipes.error.message);
+          window.kitchenOS?.logToFile('Supabase recipes error: ' + recipes.error.message);
+        }
+        if (batchLogs.error) {
+          console.error('Supabase batchLogs load error:', batchLogs.error.message);
+          window.kitchenOS?.logToFile('Supabase batchLogs error: ' + batchLogs.error.message);
+        }
+        if (expenses.error) {
+          console.error('Supabase expenses load error:', expenses.error.message);
+          window.kitchenOS?.logToFile('Supabase expenses error: ' + expenses.error.message);
+        }
+        if (dineInSales.error) {
+          console.error('Supabase dineInSales load error:', dineInSales.error.message);
+          window.kitchenOS?.logToFile('Supabase dineInSales error: ' + dineInSales.error.message);
+        }
+        if (portions.error) {
+          console.error('Supabase portions load error:', portions.error.message);
+          window.kitchenOS?.logToFile('Supabase portions error: ' + portions.error.message);
+        }
+
+        window.kitchenOS?.logToFile(`Load Complete. menuItems count: ${menuItems.data?.length}, portions count: ${portions.data?.length}`);
+
+        if (!orders.error && orders.data?.length) setOrders(orders.data);
+        if (!menuItems.error && !ingredients.error && !recipes.error && !batchLogs.error && !portions.error) {
+          setInventory({
+            menuItems: menuItems.data?.length ? menuItems.data : sampleMenuItems,
+            ingredients: ingredients.data?.length ? ingredients.data : sampleIngredients,
+            recipes: recipes.data?.length ? recipes.data : sampleRecipes,
+            batchLogs: batchLogs.data?.length ? batchLogs.data : sampleBatchLogs,
+            portions: (portions.data && portions.data.length > 0) ? portions.data : samplePortions
+          });
+        }
+        if (!expenses.error && expenses.data) useExpenseStore.setState({ expenses: expenses.data });
+        if (!dineInSales.error && dineInSales.data) useCashStore.setState({ dineInSales: dineInSales.data });
+      } catch (err) {
+        window.kitchenOS?.logToFile('Exception in loadSupabaseData: ' + (err instanceof Error ? err.message : String(err)));
+        console.error('Failed to load database data:', err);
+        setNotice('DB error: ' + (err instanceof Error ? err.message : String(err)));
+      }
     }
 
     loadSupabaseData();
@@ -200,8 +264,14 @@ export default function App() {
     const unsubscribeOrders = subscribeToOrders({
       onInsert: (order) => {
         addOrder(order);
-        startAlarm();
-        requestAnimationFrame(() => document.querySelector('[data-app-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' }));
+        if (order.status === 'completed') {
+          const { menuItems } = useInventoryStore.getState();
+          const soldByMenu = orderPortionKgByMenu(order, menuItems);
+          Object.entries(soldByMenu).forEach(([menuItemId, kg]) => addSoldKg(menuItemId, kg));
+        } else {
+          startAlarm();
+          requestAnimationFrame(() => document.querySelector('[data-app-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' }));
+        }
       },
       onUpdate: (order, oldOrder) => {
         upsertOrder(order);
@@ -239,6 +309,22 @@ export default function App() {
     );
   }
 
+  if (!currentUser) {
+    return (
+      <LoginScreen
+        onLogin={(role) => {
+          setCurrentUser(role);
+          localStorage.setItem('kitchen-os.user-role', role);
+          if (role === 'waiter') {
+            setTab('counter');
+          } else {
+            setTab('orders');
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-screen min-h-[680px] w-screen overflow-hidden bg-bg-secondary text-text-dark" data-app-scroll>
       <aside className="flex w-[164px] shrink-0 flex-col border-r border-[#eadfd7] bg-[#fffaf6] text-[#4b2b19] scrollbar-none max-[860px]:w-[82px]">
@@ -254,11 +340,13 @@ export default function App() {
           <span className="text-[14px] font-black leading-4 max-[860px]:hidden">EGO FOODS</span>
         </button>
         <nav className="flex w-full flex-1 flex-col gap-1 px-2 py-4">
-          {navItems.map(({ id, label, icon: Icon }) => {
-            const active = tab === id;
-            return (
-              <button
-                key={id}
+          {navItems
+            .filter((item) => item.roles.includes(currentUser))
+            .map(({ id, label, icon: Icon }) => {
+              const active = tab === id;
+              return (
+                <button
+                  key={id}
                 type="button"
                 onClick={() => setTab(id)}
                 aria-label={label}
@@ -279,6 +367,24 @@ export default function App() {
             );
           })}
         </nav>
+        {/* User profile / Logout */}
+        {!isElectron && (
+          <div className="mt-auto border-t border-[#eadfd7] p-2 text-center max-[860px]:p-1">
+            <p className="text-[11px] font-black uppercase text-text-muted max-[860px]:hidden">
+              {currentUser === 'owner' ? 'Owner' : 'Waiter'}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.removeItem('kitchen-os.user-role');
+                setCurrentUser(null);
+              }}
+              className="mt-1 text-[11px] font-black text-danger hover:underline uppercase block w-full text-center"
+            >
+              Logout
+            </button>
+          </div>
+        )}
         <button
           type="button"
           onClick={() => setTab('counter')}
@@ -352,7 +458,7 @@ export default function App() {
             {notice}
           </div>
         ) : null}
-        <main className="min-h-0 flex-1 overflow-hidden bg-[#f7f1ec]">
+        <main className="min-h-0 flex-1 flex flex-col overflow-hidden bg-[#f7f1ec]">
           <Screen />
         </main>
       </div>
@@ -371,5 +477,107 @@ function StatusPill({ color, label }) {
       <span className={`h-2.5 w-2.5 rounded-full ${color}`} />
       {label}
     </span>
+  );
+}
+
+function LoginScreen({ onLogin }) {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+
+  function handleKeyPress(num) {
+    setError('');
+    if (pin.length < 4) {
+      const nextPin = pin + num;
+      setPin(nextPin);
+      if (nextPin.length === 4) {
+        if (nextPin === '8888') {
+          onLogin('owner');
+        } else if (nextPin === '1111') {
+          onLogin('waiter');
+        } else {
+          setError('Invalid PIN. Please try again.');
+          setPin('');
+        }
+      }
+    }
+  }
+
+  function handleBackspace() {
+    setPin(pin.slice(0, -1));
+  }
+
+  function handleClear() {
+    setPin('');
+    setError('');
+  }
+
+  return (
+    <div className="flex h-screen w-screen items-center justify-center bg-gradient-to-br from-[#2b170c] via-[#1a0e07] to-[#0f0804] text-white">
+      <div className="w-[360px] rounded-2xl border border-white/10 bg-white/5 p-6 text-center shadow-2xl backdrop-blur-md">
+        <div className="mb-4 flex justify-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/20 text-primary border border-primary/30">
+            <Store size={32} />
+          </div>
+        </div>
+        <h1 className="text-xl font-black tracking-wide uppercase">Ego Foods POS</h1>
+        <p className="mt-1 text-[13px] font-bold text-gray-400">Enter PIN to start working</p>
+
+        {/* PIN Indicators */}
+        <div className="my-6 flex justify-center gap-3">
+          {[0, 1, 2, 3].map((idx) => (
+            <div
+              key={idx}
+              className={`h-4.5 w-4.5 rounded-full border border-white/20 transition-all duration-150 ${
+                idx < pin.length ? 'bg-primary border-primary scale-110 shadow-lg' : 'bg-transparent'
+              }`}
+            />
+          ))}
+        </div>
+
+        {error && <p className="mb-4 text-xs font-black text-red-500 uppercase tracking-wider">{error}</p>}
+
+        {/* Keypad */}
+        <div className="grid grid-cols-3 gap-3 px-4">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+            <button
+              key={num}
+              type="button"
+              onClick={() => handleKeyPress(String(num))}
+              className="flex h-14 w-14 items-center justify-center mx-auto rounded-full bg-white/5 text-lg font-black hover:bg-white/10 border border-white/5 active:scale-95 transition-transform"
+            >
+              {num}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={handleClear}
+            className="flex h-14 w-14 items-center justify-center mx-auto rounded-full text-xs font-bold text-gray-400 hover:text-white active:scale-95 transition-transform"
+          >
+            Clear
+          </button>
+          <button
+            key={0}
+            type="button"
+            onClick={() => handleKeyPress('0')}
+            className="flex h-14 w-14 items-center justify-center mx-auto rounded-full bg-white/5 text-lg font-black hover:bg-white/10 border border-white/5 active:scale-95 transition-transform"
+          >
+            0
+          </button>
+          <button
+            type="button"
+            onClick={handleBackspace}
+            className="flex h-14 w-14 items-center justify-center mx-auto rounded-full text-xs font-bold text-gray-400 hover:text-white active:scale-95 transition-transform"
+          >
+            Back
+          </button>
+        </div>
+
+        <div className="mt-8 border-t border-white/10 pt-4 text-center">
+          <p className="text-[11px] font-bold text-gray-400">
+            Default PINs: <span className="text-white">Owner (8888)</span> · <span className="text-white">Waiter (1111)</span>
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }

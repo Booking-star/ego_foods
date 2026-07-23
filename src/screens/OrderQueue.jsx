@@ -6,11 +6,8 @@ import { useInventoryStore } from '../store/inventoryStore';
 import { useOrderStore } from '../store/orderStore';
 
 const orderTabs = [
-  { id: 'new', label: 'New' },
-  { id: 'preparing', label: 'Preparing' },
-  { id: 'ready', label: 'Ready' },
-  { id: 'completed', label: 'Picked Up' },
-  { id: 'past', label: 'Past Orders' }
+  { id: 'new', label: 'New Orders 🚨' },
+  { id: 'processing', label: 'Processing 👨‍🍳' }
 ];
 
 export default function OrderQueue() {
@@ -25,20 +22,14 @@ export default function OrderQueue() {
   const [timeAsc, setTimeAsc] = useState(true);
   const topRef = useRef(null);
   const active = sortOrders(orders.filter(activeToday));
-  const completed = sortOrders(orders.filter(completedToday));
   const tabCounts = {
     new: active.filter((order) => order.status === 'new' || order.status === 'payment_pending').length,
-    preparing: active.filter((order) => order.status === 'preparing').length,
-    ready: active.filter((order) => order.status === 'ready').length,
-    completed: completed.length,
-    past: orders.filter((order) => order.status === 'completed').length
+    processing: active.filter((order) => order.status === 'preparing' || order.status === 'ready').length
   };
   const baseVisibleOrders =
     queueTab === 'new'
       ? active.filter((order) => order.status === 'new' || order.status === 'payment_pending')
-      : queueTab === 'completed' || queueTab === 'past'
-        ? completed
-        : active.filter((order) => order.status === queueTab);
+      : active.filter((order) => order.status === 'preparing' || order.status === 'ready');
   const visibleOrders = sortOrders(paidOnly ? baseVisibleOrders.filter((order) => order.payment_confirmed) : baseVisibleOrders)
     .sort((a, b) => timeAsc ? new Date(a.created_at) - new Date(b.created_at) : new Date(b.created_at) - new Date(a.created_at));
 
@@ -92,7 +83,7 @@ export default function OrderQueue() {
         </div>
       ) : null}
 
-      <div className="grid min-h-[64px] shrink-0 grid-cols-5 border-b border-[#eadfd7] bg-[#fffaf6] px-4">
+      <div className="grid min-h-[64px] shrink-0 grid-cols-2 border-b border-[#eadfd7] bg-[#fffaf6] px-4">
         {orderTabs.map((tab) => {
           const activeTab = queueTab === tab.id;
           return (
@@ -141,15 +132,15 @@ export default function OrderQueue() {
         ) : null}
 
         {visibleOrders.length === 0 ? (
-          <div className="flex min-h-[480px] items-center justify-center">
+          <div className="flex min-h-[380px] items-center justify-center">
             <div className="text-center">
-              <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-[#FFE9B8] text-5xl">!</div>
-              <h2 className="text-5xl font-black text-[#8B8D99]">No Orders!</h2>
-              <p className="mt-3 text-base font-semibold text-text-muted">New orders will appear here.</p>
+              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-[#FFE9B8] text-4xl">!</div>
+              <h2 className="text-4xl font-black text-[#8B8D99]">No Orders!</h2>
+              <p className="mt-2 text-sm font-semibold text-text-muted">New orders will appear here automatically.</p>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[repeat(auto-fit,minmax(230px,1fr))]">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {visibleOrders.map((order) => (
               <OrderCard
                 key={order.id}
@@ -161,12 +152,6 @@ export default function OrderQueue() {
                 onSelectedChange={() => toggleSelected(order.id)}
               />
             ))}
-            <div className="flex min-h-[260px] items-center justify-center rounded-sm border border-[#eadfd7] bg-[#fff6ef] text-center">
-              <div>
-                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-[#eadfd7] text-text-muted">...</div>
-                <p className="text-[13px] font-bold text-text-muted">Waiting for new orders...</p>
-              </div>
-            </div>
           </div>
         )}
       </div>

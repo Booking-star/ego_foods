@@ -59,3 +59,14 @@ export function stopAlarm() {
   }
   fallbackGain = null;
 }
+
+export function unlockAudio() {
+  try {
+    const howl = getAlarm();
+    if (howl && howl.ctx && howl.ctx.state === 'suspended') {
+      howl.ctx.resume().catch(console.error);
+    }
+  } catch (err) {
+    console.error('Failed to unlock audio context:', err);
+  }
+}
