@@ -13,7 +13,8 @@ import {
   Settings,
   Store,
   UtensilsCrossed,
-  Wifi
+  Wifi,
+  ChefHat
 } from 'lucide-react';
 import { startAlarm, unlockAudio } from './lib/audio';
 import { applyExternalMappingsToOrders, orderPortionKgByMenu } from './lib/business';
@@ -23,7 +24,7 @@ import { subscribeToOrders, supabase } from './lib/supabase';
 import { useAppStore } from './store/appStore';
 import { useCashStore } from './store/cashStore';
 import { useExpenseStore } from './store/expenseStore';
-import { sampleBatchLogs, sampleIngredients, sampleMenuItems, sampleRecipes } from './lib/sampleData';
+import { sampleBatchLogs, sampleIngredients, sampleMenuItems, sampleRecipes, samplePortions } from './lib/sampleData';
 import { useInventoryStore } from './store/inventoryStore';
 import { useOrderStore } from './store/orderStore';
 import CashLedger from './screens/CashLedger';
@@ -38,10 +39,12 @@ import CounterSales from './screens/CounterSales';
 import SettingsScreen from './screens/SettingsScreen';
 import LicenseGate from './components/LicenseGate';
 import { licenseStatus, unlockLicense } from './lib/license';
+import KdsView from './screens/KdsView';
 
 const screens = {
   orders: OrderQueue,
   counter: CounterSales,
+  kds: KdsView,
   sales: CompletedSales,
   inventory: Inventory,
   swiggy: SwiggyImportPanel,
@@ -55,6 +58,7 @@ const screens = {
 const navItems = [
   { id: 'orders', label: 'Orders', icon: ClipboardList, roles: ['owner', 'waiter'] },
   { id: 'counter', label: 'Counter Sales', icon: Store, roles: ['owner', 'waiter'] },
+  { id: 'kds', label: 'Kitchen KDS', icon: ChefHat, roles: ['owner', 'waiter'] },
   { id: 'menu', label: 'Menu & Recipes', icon: UtensilsCrossed, roles: ['owner'] },
   { id: 'inventory', label: 'Inventory', icon: Boxes, roles: ['owner'] },
   { id: 'swiggy', label: 'Swiggy Import', icon: Wifi, roles: ['owner'] },
@@ -67,6 +71,7 @@ const navItems = [
 const titleByTab = {
   orders: 'MANAGE ORDERS',
   counter: 'COUNTER SALES',
+  kds: 'KITCHEN KDS',
   sales: 'COMPLETED SALES',
   inventory: 'INVENTORY',
   swiggy: 'SWIGGY IMPORT',
@@ -84,8 +89,8 @@ export default function App() {
   const tab = useAppStore((state) => state.tab);
   const setTab = useAppStore((state) => state.setTab);
   const whatsappOpen = useAppStore((state) => state.whatsappOpen);
+  const hiddenTabs = useAppStore((state) => state.hiddenTabs);
   const [currentUser, setCurrentUser] = useState(() => {
-    if (isElectron) return 'owner';
     return localStorage.getItem('kitchen-os.user-role') || null;
   });
 
@@ -100,6 +105,7 @@ export default function App() {
   const setWhatsappOpen = useAppStore((state) => state.setWhatsappOpen);
   const printerOnline = useAppStore((state) => state.printerOnline);
   const setPrinterOnline = useAppStore((state) => state.setPrinterOnline);
+  const setTableCount = useAppStore((state) => state.setTableCount);
   const activeCount = useOrderStore((state) => state.activeCount());
   const addOrder = useOrderStore((state) => state.addOrder);
   const upsertOrder = useOrderStore((state) => state.upsertOrder);
@@ -190,7 +196,7 @@ export default function App() {
         return;
       }
       try {
-        const [orders, menuItems, ingredients, recipes, batchLogs, expenses, dineInSales, portions] = await Promise.all([
+        const [orders, menuItems, ingredients, recipes, batchLogs, expenses, dineInSales, portions, settings] = await Promise.all([
           supabase.from('orders').select('*').order('created_at', { ascending: false }),
           supabase.from('menu_items').select('*').order('sort_order', { ascending: true }),
           supabase.from('ingredients').select('*').order('created_at', { ascending: true }),
@@ -198,7 +204,8 @@ export default function App() {
           supabase.from('batch_logs').select('*').order('logged_at', { ascending: false }),
           supabase.from('expenses').select('*').order('logged_at', { ascending: false }),
           supabase.from('dinein_sales').select('*').order('logged_at', { ascending: false }),
-          supabase.from('portions').select('*')
+          supabase.from('portions').select('*'),
+          supabase.from('restaurant_settings').select('table_count').limit(1).maybeSingle()
         ]);
         
         if (orders.error) {
@@ -248,6 +255,9 @@ export default function App() {
         }
         if (!expenses.error && expenses.data) useExpenseStore.setState({ expenses: expenses.data });
         if (!dineInSales.error && dineInSales.data) useCashStore.setState({ dineInSales: dineInSales.data });
+        if (!settings.error && settings.data?.table_count) {
+          setTableCount(settings.data.table_count);
+        }
       } catch (err) {
         window.kitchenOS?.logToFile('Exception in loadSupabaseData: ' + (err instanceof Error ? err.message : String(err)));
         console.error('Failed to load database data:', err);
@@ -282,12 +292,80 @@ export default function App() {
         }
       }
     });
+
+    const channelSettings = supabase
+      .channel('settings-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_settings' }, (payload) => {
+        if (payload.new && payload.new.table_count !== undefined) {
+          setTableCount(payload.new.table_count);
+        }
+      })
+      .subscribe();
+
+    const channelMenuItems = supabase
+      .channel('menu-items-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'menu_items' }, (payload) => {
+        const currentMenuItems = useInventoryStore.getState().menuItems;
+        if (payload.eventType === 'UPDATE') {
+          const updated = currentMenuItems.map((item) =>
+            item.id === payload.new.id ? { ...item, ...payload.new } : item
+          );
+          useInventoryStore.setState({ menuItems: updated });
+        } else if (payload.eventType === 'INSERT') {
+          useInventoryStore.setState({ menuItems: [...currentMenuItems, payload.new] });
+        } else if (payload.eventType === 'DELETE') {
+          const updated = currentMenuItems.filter((item) => item.id !== payload.old.id);
+          useInventoryStore.setState({ menuItems: updated });
+        }
+      })
+      .subscribe();
+
+    const channelPortions = supabase
+      .channel('portions-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'portions' }, (payload) => {
+        const currentPortions = useInventoryStore.getState().portions;
+        if (payload.eventType === 'INSERT') {
+          useInventoryStore.setState({ portions: [...currentPortions, payload.new] });
+        } else if (payload.eventType === 'UPDATE') {
+          const updated = currentPortions.map((p) =>
+            p.id === payload.new.id ? { ...p, ...payload.new } : p
+          );
+          useInventoryStore.setState({ portions: updated });
+        } else if (payload.eventType === 'DELETE') {
+          const updated = currentPortions.filter((p) => p.id !== payload.old.id);
+          useInventoryStore.setState({ portions: updated });
+        }
+      })
+      .subscribe();
+
+    const channelIngredients = supabase
+      .channel('ingredients-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredients' }, (payload) => {
+        const currentIngredients = useInventoryStore.getState().ingredients;
+        if (payload.eventType === 'INSERT') {
+          useInventoryStore.setState({ ingredients: [...currentIngredients, payload.new] });
+        } else if (payload.eventType === 'UPDATE') {
+          const updated = currentIngredients.map((i) =>
+            i.id === payload.new.id ? { ...i, ...payload.new } : i
+          );
+          useInventoryStore.setState({ ingredients: updated });
+        } else if (payload.eventType === 'DELETE') {
+          const updated = currentIngredients.filter((i) => i.id !== payload.old.id);
+          useInventoryStore.setState({ ingredients: updated });
+        }
+      })
+      .subscribe();
+
     return () => {
       if (kitchenPoll) clearInterval(kitchenPoll);
       unsubscribeOrders();
       unsubscribe();
+      supabase.removeChannel(channelSettings);
+      supabase.removeChannel(channelMenuItems);
+      supabase.removeChannel(channelPortions);
+      supabase.removeChannel(channelIngredients);
     };
-  }, [addOrder, addSoldKg, mergeImportedOrders, setInventory, setOrders, upsertOrder]);
+  }, [addOrder, addSoldKg, mergeImportedOrders, setInventory, setOrders, upsertOrder, setTableCount]);
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -335,13 +413,13 @@ export default function App() {
           aria-label="Kitchen OS home"
         >
           <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#eadfd7] bg-white shadow-card">
-            <img src="/ego-foods-logo.jpg" alt="Ego Foods logo" className="h-full w-full object-cover" />
+            <img src="ego-foods-logo.jpg" alt="Ego Foods logo" className="h-full w-full object-cover" />
           </span>
           <span className="text-[14px] font-black leading-4 max-[860px]:hidden">EGO FOODS</span>
         </button>
         <nav className="flex w-full flex-1 flex-col gap-1 px-2 py-4">
           {navItems
-            .filter((item) => item.roles.includes(currentUser))
+            .filter((item) => item.roles.includes(currentUser) && (item.id === 'settings' || !hiddenTabs.includes(item.id)))
             .map(({ id, label, icon: Icon }) => {
               const active = tab === id;
               return (

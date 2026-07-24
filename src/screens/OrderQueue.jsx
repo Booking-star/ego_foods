@@ -1,4 +1,4 @@
-import { AlertTriangle, Filter, TimerReset } from 'lucide-react';
+import { AlertTriangle, TimerReset } from 'lucide-react';
 import { useRef, useState } from 'react';
 import OrderCard from '../components/OrderCard';
 import { activeToday, completedToday, orderItemPortionKg, sortOrders } from '../lib/business';
@@ -18,7 +18,6 @@ export default function OrderQueue() {
   const addSoldKg = useInventoryStore((state) => state.addSoldKg);
   const [queueTab, setQueueTab] = useState('new');
   const [selected, setSelected] = useState(new Set());
-  const [paidOnly, setPaidOnly] = useState(false);
   const [timeAsc, setTimeAsc] = useState(true);
   const topRef = useRef(null);
   const active = sortOrders(orders.filter(activeToday));
@@ -30,10 +29,10 @@ export default function OrderQueue() {
     queueTab === 'new'
       ? active.filter((order) => order.status === 'new' || order.status === 'payment_pending')
       : active.filter((order) => order.status === 'preparing' || order.status === 'ready');
-  const visibleOrders = sortOrders(paidOnly ? baseVisibleOrders.filter((order) => order.payment_confirmed) : baseVisibleOrders)
+  const visibleOrders = sortOrders(baseVisibleOrders)
     .sort((a, b) => timeAsc ? new Date(a.created_at) - new Date(b.created_at) : new Date(b.created_at) - new Date(a.created_at));
 
-  const paidNewOrders = visibleOrders.filter((order) => (order.status === 'new' || order.status === 'payment_pending') && order.payment_confirmed);
+  const paidNewOrders = visibleOrders.filter((order) => order.status === 'new' || order.status === 'payment_pending');
 
   function toggleSelected(orderId) {
     setSelected((current) => {
@@ -110,9 +109,6 @@ export default function OrderQueue() {
             <p className="mt-1 text-[13px] font-semibold text-text-muted">Accept paid WhatsApp orders, track preparation, and finish pickup.</p>
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={() => setPaidOnly((value) => !value)} className={`inline-flex min-h-10 items-center gap-2 rounded-sm border border-[#eadfd7] px-3 text-[13px] font-bold ${paidOnly ? 'bg-[#fff0e5] text-[#9a3f00]' : 'bg-white text-text-dark'}`}>
-              <Filter size={15} /> {paidOnly ? 'Paid Only' : 'All Payments'}
-            </button>
             <button type="button" onClick={() => setTimeAsc((value) => !value)} className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-[#eadfd7] bg-white px-3 text-[13px] font-bold text-text-dark">
               <TimerReset size={15} /> {timeAsc ? 'Time Ascending' : 'Time Descending'}
             </button>

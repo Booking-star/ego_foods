@@ -34,6 +34,8 @@ const apiToken = configEnv.VITE_KITCHEN_API_TOKEN || 'sHUfelbnXs8N-zTc7NvkVZgDY5
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -116,6 +118,9 @@ function customerReceiptHtml(order) {
     const price = Number(item.price || 0);
     return `<tr><td class="item">${escapeHtml(item.name)} ${escapeHtml(item.variant || '')}<br/>x ${qty}</td><td class="amount">${money(price * qty)}</td></tr>`;
   }).join('');
+  
+  const isOnline = order.source !== 'counter';
+
   return `<!doctype html><html><head><meta charset="utf-8"/><style>
     ${receiptCss(11)}
   </style></head><body>
@@ -127,25 +132,64 @@ function customerReceiptHtml(order) {
     <div class="line"></div>
     <table>${items}</table>
     <div class="total">Total: ${money(order.total_amount || order.total || 0)}</div>
-    <div class="bold">Pickup OTP</div><div class="otp">${escapeHtml(order.pickup_code || '')}</div>
-    <div class="center">Share this OTP with the pickup person.</div>
+    ${isOnline ? `
+      <div class="bold">Pickup OTP</div><div class="otp">${escapeHtml(order.pickup_otp || order.pickup_code || '')}</div>
+      <div class="center">Share this OTP with the pickup person.</div>
+    ` : ''}
     <div class="center">Thanks and enjoy the food.</div>
   </body></html>`;
 }
 
 function kitchenReceiptHtml(order) {
-  const items = (order.items || []).map((item) => {
-    const qty = Number(item.qty || item.quantity || 1);
-    return `<tr><td class="item">${escapeHtml(item.name)} ${escapeHtml(item.variant || '')}</td><td class="amount">x ${qty}</td></tr>`;
-  }).join('');
+  let itemsHtml = '';
+  if (order.is_update) {
+    itemsHtml = (order.items || []).map((item) => {
+      const delta = Number(item.deltaQty || 0);
+      const actionLabel = item.action || (delta > 0 ? 'ADD' : 'REMOVE');
+      const absDelta = Math.abs(delta);
+      const totalText = item.totalQty > 0 ? `(New Total: ${item.totalQty})` : '(COMPLETELY REMOVED)';
+      const color = actionLabel === 'ADD' ? '#007f00' : '#d00000';
+      return `
+        <tr>
+          <td class="item" style="padding: 1.5mm 0; border-bottom: 1px dashed #ccc; font-size: 11px;">
+            <b style="color: ${color}; font-size: 12px;">[${actionLabel}] ${absDelta} x</b> ${escapeHtml(item.name)}
+            <div style="font-size: 9px; color: #555; margin-top: 0.5mm;">${totalText}</div>
+          </td>
+        </tr>`;
+    }).join('');
+  } else {
+    itemsHtml = (order.items || []).map((item) => {
+      const qty = Number(item.qty || item.quantity || 1);
+      return `<tr><td class="item" style="font-size: 12px; font-weight: bold; padding: 1.5mm 0;">${escapeHtml(item.name)} ${escapeHtml(item.variant || '')}</td><td class="amount" style="font-size: 13px; font-weight: 900; text-align: right; width: 12mm;">x ${qty}</td></tr>`;
+    }).join('');
+  }
+
+  const typeLabel = order.customer_name || (order.table_number === "Takeaway" ? "Takeaway" : (order.table_number ? `Table ${order.table_number}` : 'Takeaway'));
+  const isOnline = order.source !== 'counter';
+
   return `<!doctype html><html><head><meta charset="utf-8"/><style>
     ${receiptCss(12)}
   </style></head><body>
-    <h1>KITCHEN COPY</h1>
-    <div>Order: ${escapeHtml(order.pickup_code || order.id || '')}</div>
-    <div class="bold">Pickup OTP</div><div class="otp">${escapeHtml(order.pickup_code || '')}</div>
+    ${order.is_update ? `
+      <div style="background: #000; color: #fff; text-align: center; font-size: 13px; font-weight: 900; padding: 1.5mm; margin-bottom: 2mm; letter-spacing: 1px;">
+        *** ORDER UPDATED ***
+      </div>
+    ` : `
+      <h1>KITCHEN COPY</h1>
+    `}
+    <div style="font-size: 16px; font-weight: bold; margin-bottom: 2mm; text-align: center; border: 2px solid #000; padding: 1.5mm; text-transform: uppercase;">${escapeHtml(typeLabel)}</div>
+    <div>Order: ${escapeHtml(order.pickup_otp || order.pickup_code || order.order_code || order.id || '')}</div>
+    ${isOnline ? `
+      <div class="bold">Pickup OTP</div><div class="otp">${escapeHtml(order.pickup_otp || order.pickup_code || '')}</div>
+    ` : ''}
     <div class="line"></div>
-    <table>${items}</table>
+    <table style="width: 100%; border-collapse: collapse;">${itemsHtml}</table>
+    ${order.is_update ? `
+      <div class="line"></div>
+      <div style="font-size: 10px; font-weight: bold; text-align: center; margin-top: 2mm; color: #d00000; border: 1px solid #d00000; padding: 1mm;">
+        PLEASE CLEAR PREVIOUS KOT AND USE THESE CHANGES
+      </div>
+    ` : ''}
   </body></html>`;
 }
 
@@ -165,11 +209,20 @@ function registerPrinterIpc() {
   ipcMain.handle('printer:print-order-copies', async (_event, order, options = {}) => {
     const customerPrinter = options.customerPrinterName || defaultCustomerPrinterName;
     const kitchenPrinter = options.kitchenPrinterName || customerPrinter;
+    
     if (options.printCustomer !== false) {
-      await printHtml(customerReceiptHtml(order || {}), customerPrinter);
+      try {
+        await printHtml(customerReceiptHtml(order || {}), customerPrinter);
+      } catch (err) {
+        console.error('Customer print failed:', err);
+      }
     }
     if (options.printKitchen !== false) {
-      await printHtml(kitchenReceiptHtml(order || {}), kitchenPrinter);
+      try {
+        await printHtml(kitchenReceiptHtml(order || {}), kitchenPrinter);
+      } catch (err) {
+        console.error('Kitchen print failed:', err);
+      }
     }
     return { ok: true, customerPrinter, kitchenPrinter };
   });
@@ -184,7 +237,9 @@ function createWindow() {
     minWidth: 900,
     minHeight: 680,
     title: 'Kitchen OS - Ego Foods',
-    icon: path.join(__dirname, '..', 'assets', 'icon.png'),
+    icon: fs.existsSync(path.join(__dirname, '..', 'dist', 'logo.png'))
+      ? path.join(__dirname, '..', 'dist', 'logo.png')
+      : path.join(__dirname, '..', 'public', 'logo.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -200,39 +255,48 @@ function createWindow() {
 async function startPrintJobPolling() {
   const targetUrl = isDev ? 'http://127.0.0.1:3000' : apiUrl;
   
-  setInterval(async () => {
+  async function poll() {
     try {
       const res = await fetch(`${targetUrl.replace(/\/$/, '')}/api/kitchen-os/print-jobs`, {
         headers: { 'x-kitchen-token': apiToken }
       });
-      if (!res.ok) return;
-      const data = await res.json();
-      const jobs = data.jobs || [];
-      
-      for (const job of jobs) {
-        const { id, printer_type, content } = job;
-        const customerPrinter = defaultCustomerPrinterName;
+      if (res.ok) {
+        const data = await res.json();
+        const jobs = data.jobs || [];
         
-        if (printer_type === 'kitchen') {
-          await printHtml(kitchenReceiptHtml(content), customerPrinter);
-        } else {
-          await printHtml(customerReceiptHtml(content), customerPrinter);
+        for (const job of jobs) {
+          const { id, printer_type, content } = job;
+          const customerPrinter = defaultCustomerPrinterName;
+          
+          try {
+            if (printer_type === 'kitchen') {
+              await printHtml(kitchenReceiptHtml(content), customerPrinter);
+            } else {
+              await printHtml(customerReceiptHtml(content), customerPrinter);
+            }
+            
+            // Mark job as completed
+            await fetch(`${targetUrl.replace(/\/$/, '')}/api/kitchen-os/print-jobs`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-kitchen-token': apiToken
+              },
+              body: JSON.stringify({ jobId: id, status: 'completed' })
+            });
+          } catch (printErr) {
+            console.error('Failed to print/complete job from background poll:', printErr);
+          }
         }
-        
-        // Mark job as completed
-        await fetch(`${targetUrl.replace(/\/$/, '')}/api/kitchen-os/print-jobs`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-kitchen-token': apiToken
-          },
-          body: JSON.stringify({ jobId: id, status: 'completed' })
-        });
       }
     } catch (err) {
       // Ignore network errors when dashboard is reloading
+    } finally {
+      setTimeout(poll, 3000);
     }
-  }, 3000);
+  }
+  
+  poll();
 }
 
 ipcMain.on('log-to-file', (event, msg) => {

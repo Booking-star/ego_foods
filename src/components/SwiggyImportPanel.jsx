@@ -1,5 +1,5 @@
 import { Download, FolderOpen, RefreshCw, Save, ShieldAlert } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   getSwiggySettings,
   hasSwiggyBridge,
@@ -24,11 +24,19 @@ const defaultSettings = {
 
 export default function SwiggyImportPanel() {
   const mergeImportedOrders = useOrderStore((state) => state.mergeImportedOrders);
-  const inventory = useInventoryStore((state) => ({
-    externalMappings: state.externalMappings,
-    portions: state.portions,
-    menuItems: state.menuItems
-  }));
+  
+  const externalMappings = useInventoryStore((state) => state.externalMappings || []);
+  const portions = useInventoryStore((state) => state.portions || []);
+  const menuItems = useInventoryStore((state) => state.menuItems || []);
+  const upsertExternalMapping = useInventoryStore((state) => state.upsertExternalMapping);
+  const deleteExternalMapping = useInventoryStore((state) => state.deleteExternalMapping);
+
+  const inventory = useMemo(() => ({
+    externalMappings,
+    portions,
+    menuItems
+  }), [externalMappings, portions, menuItems]);
+
   const [settings, setSettings] = useState(defaultSettings);
   const [state, setState] = useState({ lastStatus: 'Not imported yet', lastScrapeAtIso: '' });
   const [loading, setLoading] = useState('');
@@ -36,6 +44,39 @@ export default function SwiggyImportPanel() {
   const [progress, setProgress] = useState(null);
   const [importDate, setImportDate] = useState(todayISO());
   const bridgeAvailable = hasSwiggyBridge();
+
+  // Mappings Form States
+  const [swiggyItemName, setSwiggyItemName] = useState('');
+  const [selectedMenuItemId, setSelectedMenuItemId] = useState('');
+  const [selectedPortionId, setSelectedPortionId] = useState('');
+
+  const activePortions = useMemo(() => {
+    return portions.filter(p => p.menu_item_id === selectedMenuItemId);
+  }, [portions, selectedMenuItemId]);
+
+  useEffect(() => {
+    if (activePortions.length > 0) {
+      setSelectedPortionId(activePortions[0].id);
+    } else {
+      setSelectedPortionId('');
+    }
+  }, [activePortions]);
+
+  const handleAddMapping = () => {
+    if (!swiggyItemName.trim() || !selectedMenuItemId || !selectedPortionId) {
+      alert('Please fill out all fields.');
+      return;
+    }
+    
+    upsertExternalMapping({
+      source: 'swiggy',
+      external_item_name: swiggyItemName.trim(),
+      menu_item_id: selectedMenuItemId,
+      portion_id: selectedPortionId
+    });
+    
+    setSwiggyItemName('');
+  };
 
   useEffect(() => {
     async function load() {
@@ -46,7 +87,7 @@ export default function SwiggyImportPanel() {
       mergeImportedOrders(applyExternalMappingsToOrders(payload.importedOrders || [], inventory));
     }
     load();
-  }, [mergeImportedOrders]);
+  }, [mergeImportedOrders, inventory]);
 
   useEffect(() => onSwiggyProgress((nextProgress) => {
     setProgress(nextProgress);
@@ -108,7 +149,7 @@ export default function SwiggyImportPanel() {
   }
 
   return (
-    <section className="h-full overflow-y-auto bg-[#f7f1ec] p-5 scrollbar-none">
+    <section className="h-full overflow-y-auto bg-[#f7f1ec] p-5 scrollbar-none space-y-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-black text-text-dark">Swiggy Import</h1>
@@ -260,6 +301,106 @@ export default function SwiggyImportPanel() {
       {settings.storageWarning ? (
         <p className="mt-3 text-[14px] font-bold text-danger">Password encryption is unavailable on this Windows profile. Credentials are stored locally with basic encoding.</p>
       ) : null}
+      </div>
+
+      {/* Panel: Swiggy Mappings Editor */}
+      <div className="mt-6 rounded-sm border border-[#eadfd7] bg-white p-5 shadow-card space-y-4">
+        <div>
+          <h2 className="text-[14px] font-black text-text-dark uppercase tracking-wider">Swiggy Dish Mappings</h2>
+          <p className="text-[12px] font-semibold text-text-muted mt-0.5">Map Swiggy Partner Portal dish names to internal POS recipe portions for stock calculations.</p>
+        </div>
+
+        {/* Add Mappings Form */}
+        <div className="grid gap-3 md:grid-cols-4 items-end bg-[#fffcf9] p-3 border border-[#eadfd7] rounded">
+          <Field label="Swiggy Dish Name">
+            <input
+              type="text"
+              placeholder="e.g. Chicken Fry Piece Palav Single"
+              value={swiggyItemName}
+              onChange={(e) => setSwiggyItemName(e.target.value)}
+              className="h-10 w-full rounded border border-[#eadfd7] px-3 text-xs font-bold"
+            />
+          </Field>
+          
+          <Field label="Internal Menu Item">
+            <select
+              value={selectedMenuItemId}
+              onChange={(e) => setSelectedMenuItemId(e.target.value)}
+              className="h-10 w-full rounded border border-[#eadfd7] bg-white px-2 text-xs font-bold"
+            >
+              <option value="">Select Menu Item</option>
+              {menuItems.map(item => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Internal Portion / Size">
+            <select
+              value={selectedPortionId}
+              onChange={(e) => setSelectedPortionId(e.target.value)}
+              disabled={!selectedMenuItemId}
+              className="h-10 w-full rounded border border-[#eadfd7] bg-white px-2 text-xs font-bold"
+            >
+              <option value="">Select Portion</option>
+              {activePortions.map(p => (
+                <option key={p.id} value={p.id}>{p.name} ({p.grams}g)</option>
+              ))}
+            </select>
+          </Field>
+
+          <button
+            type="button"
+            onClick={handleAddMapping}
+            className="h-10 rounded bg-primary hover:bg-orange-700 text-white text-xs font-black uppercase transition-all"
+          >
+            Add Mapping
+          </button>
+        </div>
+
+        {/* Mappings List */}
+        <div className="border border-[#eadfd7] rounded overflow-hidden">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-[#f7f1ec] border-b border-[#eadfd7] font-black text-text-muted uppercase">
+                <th className="p-3">Swiggy Dish Name</th>
+                <th className="p-3">POS Menu Item</th>
+                <th className="p-3">POS Portion / Size</th>
+                <th className="p-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {externalMappings.filter(m => m.source === 'swiggy').length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="p-4 text-center text-text-muted font-semibold">
+                    No Swiggy dish mappings configured. Live Swiggy orders won't trigger ingredient auto-deductions.
+                  </td>
+                </tr>
+              ) : (
+                externalMappings.filter(m => m.source === 'swiggy').map((m) => {
+                  const menuItem = menuItems.find(item => item.id === m.menu_item_id);
+                  const portion = portions.find(p => p.id === m.portion_id);
+                  return (
+                    <tr key={m.id} className="border-b border-[#f7f1ec] hover:bg-gray-50 text-text-dark font-bold">
+                      <td className="p-3 font-extrabold">{m.external_item_name}</td>
+                      <td className="p-3">{menuItem ? menuItem.name : '—'}</td>
+                      <td className="p-3">{portion ? `${portion.name} (${portion.grams}g)` : '—'}</td>
+                      <td className="p-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => deleteExternalMapping(m.id)}
+                          className="text-red-500 hover:text-red-700 font-extrabold uppercase text-[10px]"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );

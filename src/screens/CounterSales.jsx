@@ -2,11 +2,13 @@ import { useState, useEffect, useMemo } from 'react';
 import { Minus, Plus, Printer, Save, Trash2, ArrowDownToLine, ReceiptText } from 'lucide-react';
 import { formatINR } from '../lib/format';
 import { useInventoryStore } from '../store/inventoryStore';
+import { useAppStore } from '../store/appStore';
 import { supabase } from '../lib/supabase';
 
 export default function CounterSales() {
   const menuItems = useInventoryStore((state) => state.menuItems);
   const portions = useInventoryStore((state) => state.portions);
+  const tableCount = useAppStore((state) => state.tableCount);
   
   const [selectedTable, setSelectedTable] = useState('Takeaway'); // 'Takeaway' or 1 to 12
   const [cart, setCart] = useState([]); // Array of { portion_id, name, price, quantity, printed_quantity }
@@ -14,14 +16,34 @@ export default function CounterSales() {
   const [restaurantId, setRestaurantId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [unavailableModal, setUnavailableModal] = useState(null); // null or { items: [...], onConfirm: () => void }
 
   // 1. Fetch active restaurant ID
   useEffect(() => {
     async function fetchRestaurant() {
-      if (!supabase) return;
-      const { data } = await supabase.from('restaurants').select('id').limit(1);
+      if (!supabase) {
+        window.kitchenOS?.logToFile("supabase is null in fetchRestaurant!");
+        return;
+      }
+      // Try querying menu_items to get restaurant_id (bypasses restaurants RLS restriction)
+      const { data: menuData, error: menuErr } = await supabase.from('menu_items').select('restaurant_id').limit(1);
+      if (menuErr) {
+        window.kitchenOS?.logToFile("menu_items query error: " + menuErr.message);
+      }
+      if (menuData && menuData[0]?.restaurant_id) {
+        window.kitchenOS?.logToFile("Found restaurant_id from menu_items: " + menuData[0].restaurant_id);
+        setRestaurantId(menuData[0].restaurant_id);
+        return;
+      }
+      const { data, error: restErr } = await supabase.from('restaurants').select('id').limit(1);
+      if (restErr) {
+        window.kitchenOS?.logToFile("restaurants query error: " + restErr.message);
+      }
       if (data && data[0]) {
+        window.kitchenOS?.logToFile("Found restaurant_id from restaurants: " + data[0].id);
         setRestaurantId(data[0].id);
+      } else {
+        window.kitchenOS?.logToFile("Could not find restaurant_id anywhere!");
       }
     }
     fetchRestaurant();
@@ -81,7 +103,7 @@ export default function CounterSales() {
     }
   }, [selectedTable, activeOrders]);
 
-  // Available portions for counter menu selection
+  // Available portions for counter menu selection (keeps out-of-stock items visible but flagged)
   const saleItems = useMemo(() => {
     const categoryOrder = {
       'veg': 1,
@@ -92,13 +114,17 @@ export default function CounterSales() {
     };
 
     return portions
-      .filter((p) => p.source !== 'swiggy' && Number(p.price))
+      .filter((p) => {
+        if (p.source === 'swiggy' || !Number(p.price)) return false;
+        return true;
+      })
       .map((p) => {
         const menuItem = menuItems.find((item) => item.id === p.menu_item_id);
         return {
           ...p,
           menuName: menuItem?.name || 'Menu item',
-          category: menuItem?.category || 'Veg'
+          category: menuItem?.category || 'Veg',
+          isAvailable: menuItem?.available !== false
         };
       })
       .sort((a, b) => {
@@ -195,27 +221,117 @@ export default function CounterSales() {
     );
   }, [selectedTable, activeOrders]);
 
+  // Get active customer if exists, otherwise null
+  async function getCustomerIdIfExists(tableNum) {
+    const systemPhone = tableNum === 'Takeaway' ? 'takeaway' : `dinein_${tableNum}`;
+
+    const { data: existing, error: findError } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('restaurant_id', restaurantId)
+      .eq('whatsapp_number', systemPhone)
+      .maybeSingle();
+
+    if (findError) {
+      window.kitchenOS?.logToFile("Error looking up customer: " + findError.message);
+      return null;
+    }
+
+    return existing?.id || null;
+  }
+
+  // Helper to verify item availability before checkout/holding
+  const checkCartAvailability = (currentCart, onConfirmAction) => {
+    const outOfStock = currentCart.filter((cartItem) => {
+      const portion = portions.find(p => p.id === cartItem.portion_id);
+      if (!portion) return false;
+      const menuItem = menuItems.find(m => m.id === portion.menu_item_id);
+      return menuItem?.available === false;
+    });
+
+    if (outOfStock.length > 0) {
+      setUnavailableModal({
+        items: outOfStock,
+        onConfirm: () => {
+          const cleanedCart = currentCart.filter(c => !outOfStock.some(o => o.portion_id === c.portion_id));
+          setCart(cleanedCart);
+          setUnavailableModal(null);
+          onConfirmAction(cleanedCart);
+        }
+      });
+      return false; // has unavailable items
+    }
+    return true; // all items available
+  };
+
   // 4. Save/Hold Order and Print Kitchen Delta
-  async function handleHoldAndPrint() {
-    if (!cart.length || !restaurantId || loading) return;
+  async function handleHoldAndPrint(currentCart = cart) {
+    if (currentCart === cart) {
+      const ok = checkCartAvailability(cart, (cleaned) => handleHoldAndPrint(cleaned));
+      if (!ok) return;
+    }
+
+    window.kitchenOS?.logToFile("handleHoldAndPrint clicked. restaurantId: " + restaurantId + " cart.length: " + currentCart.length + " loading: " + loading);
+    if (!currentCart.length || !restaurantId || loading) {
+      window.kitchenOS?.logToFile("Exit early from handleHoldAndPrint because conditions not met");
+      return;
+    }
     setLoading(true);
     setMessage('');
 
     try {
       // Calculate delta items to print to kitchen
-      const printItems = cart
-        .map((item) => {
-          const deltaQty = item.quantity - item.printed_quantity;
-          return {
-            ...item,
-            quantity: deltaQty,
-            qty: deltaQty
-          };
-        })
-        .filter((item) => item.quantity > 0);
+      const printItems = [];
+      let isUpdate = false;
+
+      if (currentActiveOrder) {
+        isUpdate = true;
+        
+        // 1. Check for changed or new items in the cart
+        currentCart.forEach((item) => {
+          const dbItem = (currentActiveOrder.items || []).find(
+            (db) => (db.portion_id || db.id) === item.portion_id
+          );
+          const oldQty = dbItem ? Number(dbItem.printed_quantity || dbItem.quantity || dbItem.qty || 0) : 0;
+          const deltaQty = item.quantity - oldQty;
+
+          if (deltaQty !== 0) {
+            printItems.push({
+              name: item.name,
+              deltaQty: deltaQty,
+              totalQty: item.quantity,
+              action: deltaQty > 0 ? 'ADD' : 'REMOVE'
+            });
+          }
+        });
+
+        // 2. Check for completely deleted items (present in DB order but not in cart)
+        (currentActiveOrder.items || []).forEach((dbItem) => {
+          const key = dbItem.portion_id || dbItem.id;
+          const cartItem = currentCart.find((item) => item.portion_id === key);
+          if (!cartItem) {
+            const oldQty = Number(dbItem.printed_quantity || dbItem.quantity || dbItem.qty || 0);
+            printItems.push({
+              name: dbItem.name,
+              deltaQty: -oldQty,
+              totalQty: 0,
+              action: 'REMOVE'
+            });
+          }
+        });
+      } else {
+        isUpdate = false;
+        currentCart.forEach((item) => {
+          printItems.push({
+            name: item.name,
+            qty: item.quantity,
+            quantity: item.quantity
+          });
+        });
+      }
 
       // Save order payload
-      const updatedItems = cart.map((item) => ({
+      const updatedItems = currentCart.map((item) => ({
         portion_id: item.portion_id,
         name: item.name,
         price: item.price,
@@ -226,14 +342,16 @@ export default function CounterSales() {
       }));
 
       const pickupCode = currentActiveOrder?.pickup_code || Math.floor(1000 + Math.random() * 9000).toString();
+      const customerId = await getCustomerIdIfExists(selectedTable);
 
       const orderPayload = {
         restaurant_id: restaurantId,
+        customer_id: customerId,
         customer_name: selectedTable === 'Takeaway' ? 'Takeaway' : `Table ${selectedTable}`,
         customer_phone: '',
         items: updatedItems,
-        total_amount: total,
-        status: 'new',
+        total_amount: currentCart.reduce((sum, item) => sum + item.price * item.quantity, 0),
+        status: 'preparing',
         payment_confirmed: false,
         source: 'counter',
         order_type: selectedTable === 'Takeaway' ? 'takeaway' : 'dine_in',
@@ -245,10 +363,11 @@ export default function CounterSales() {
 
       if (orderId) {
         // Update existing order
-        await supabase
+        const { error } = await supabase
           .from('orders')
           .update({ ...orderPayload, updated_at: new Date().toISOString() })
           .eq('id', orderId);
+        if (error) throw error;
       } else {
         // Insert new order
         const { data, error } = await supabase
@@ -266,7 +385,8 @@ export default function CounterSales() {
           id: orderId,
           pickup_code: pickupCode,
           customer_name: selectedTable === 'Takeaway' ? 'Takeaway' : `Table ${selectedTable}`,
-          items: printItems
+          items: printItems,
+          is_update: isUpdate
         };
         await window.kitchenOS.printer.printOrderCopies(printOrder, { printCustomer: false, printKitchen: true });
       }
@@ -275,7 +395,9 @@ export default function CounterSales() {
       fetchActiveOrders();
     } catch (err) {
       console.error(err);
-      setMessage('Failed to save or print order.');
+      const errMsg = err.message || err.details || JSON.stringify(err);
+      window.kitchenOS?.logToFile("Error in handleHoldAndPrint: " + errMsg);
+      setMessage(errMsg || 'Failed to save or print order.');
     } finally {
       setLoading(false);
     }
@@ -296,19 +418,24 @@ export default function CounterSales() {
       setMessage('Client copy receipt printed successfully!');
     } catch (err) {
       console.error(err);
-      setMessage('Failed to print client copy.');
+      setMessage('Failed to print customer receipt.');
     }
   }
 
   // 6. Settle and Finalize Order (Saves as Cash Completed Sales)
-  async function handleSettleBill() {
-    if (!cart.length || !restaurantId || loading) return;
+  async function handleSettleBill(currentCart = cart) {
+    if (currentCart === cart) {
+      const ok = checkCartAvailability(cart, (cleaned) => handleSettleBill(cleaned));
+      if (!ok) return;
+    }
+
+    if (!currentCart.length || !restaurantId || loading) return;
     setLoading(true);
     setMessage('');
 
     try {
       const now = new Date().toISOString();
-      const updatedItems = cart.map((item) => ({
+      const updatedItems = currentCart.map((item) => ({
         portion_id: item.portion_id,
         name: item.name,
         price: item.price,
@@ -319,37 +446,42 @@ export default function CounterSales() {
       }));
 
       const pickupCode = currentActiveOrder?.pickup_code || Math.floor(1000 + Math.random() * 9000).toString();
+      const currentCartTotal = currentCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
       if (currentActiveOrder?.id) {
         // Update existing active order
-        await supabase
+        const { error } = await supabase
           .from('orders')
           .update({
             status: 'completed',
             payment_confirmed: true,
             items: updatedItems,
-            total_amount: total,
+            total_amount: currentCartTotal,
             updated_at: now
           })
           .eq('id', currentActiveOrder.id);
+        if (error) throw error;
       } else {
+        const customerId = await getCustomerIdIfExists(selectedTable);
         // Insert new order directly as completed (e.g. direct Takeaway settle)
-        await supabase
+        const { error } = await supabase
           .from('orders')
           .insert({
             restaurant_id: restaurantId,
+            customer_id: customerId,
             customer_name: selectedTable === 'Takeaway' ? 'Takeaway' : `Table ${selectedTable}`,
             customer_phone: '',
             items: updatedItems,
-            total_amount: total,
+            total_amount: currentCartTotal,
             payment_confirmed: true,
             order_type: selectedTable === 'Takeaway' ? 'takeaway' : 'dine_in',
-            table_number: selectedTable === 'Takeaway' ? null : Number(selectedTable),
+            table_number: selectedTable === 'Takeaway' ? null : String(selectedTable),
             status: 'completed',
             pickup_code: pickupCode,
             created_at: now,
             updated_at: now
           });
+        if (error) throw error;
       }
 
       // Log into cash/sales ledger
@@ -357,7 +489,7 @@ export default function CounterSales() {
         restaurant_id: restaurantId,
         type: selectedTable === 'Takeaway' ? 'Takeaway Sale' : 'Dine-In Sale',
         description: selectedTable === 'Takeaway' ? 'Finalized Takeaway Bill' : `Finalized Table ${selectedTable} Bill`,
-        amount: total,
+        amount: currentCartTotal,
         date: now.split('T')[0]
       });
 
@@ -368,7 +500,7 @@ export default function CounterSales() {
           customer_name: 'Takeaway',
           customer_phone: '',
           items: updatedItems,
-          total_amount: total
+          total_amount: currentCartTotal
         };
         await window.kitchenOS.printer.printOrderCopies(orderData, { printKitchen: true, printCustomer: true }).catch(() => {});
       }
@@ -434,7 +566,7 @@ export default function CounterSales() {
             )}
           </button>
 
-          {Array.from({ length: 4 }, (_, i) => i + 1).map((num) => {
+          {Array.from({ length: tableCount }, (_, i) => i + 1).map((num) => {
             const tableOrder = activeOrders.find(
               (o) => o.order_type === 'dine_in' && String(o.table_number) === String(num)
             );
@@ -464,7 +596,14 @@ export default function CounterSales() {
         <h2 className="mb-3 text-lg font-black text-text-dark">Counter Menu Items</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {saleItems.map((item) => (
-            <div key={item.id} className="rounded border border-[#eadfd7] bg-white p-4 shadow-sm">
+            <div key={item.id} className={`rounded border bg-white p-4 shadow-sm relative transition-all ${
+              item.isAvailable ? 'border-[#eadfd7]' : 'border-red-200 bg-red-50/20 opacity-90'
+            }`}>
+              {!item.isAvailable && (
+                <span className="absolute top-2 right-2 px-1.5 py-0.5 text-[9px] font-black uppercase rounded bg-red-100 text-red-700 tracking-wider">
+                  Out of Stock
+                </span>
+              )}
               <p className="text-[15px] font-black text-text-dark">{item.menuName}</p>
               <p className="mt-1 text-[13px] font-bold text-text-muted">{item.name} - {item.grams}g</p>
               <div className="mt-3 flex items-center justify-between">
@@ -488,6 +627,9 @@ export default function CounterSales() {
                       <button
                         type="button"
                         onClick={() => {
+                          if (!item.isAvailable) {
+                            alert(`${item.menuName} is currently marked Out of Stock. You can add it, but must remove or confirm it before final payment.`);
+                          }
                           if (qty === 0) {
                             addToCart(item);
                           } else {
@@ -570,7 +712,7 @@ export default function CounterSales() {
               <button
                 type="button"
                 disabled={!cart.length || loading}
-                onClick={handleHoldAndPrint}
+                onClick={() => handleHoldAndPrint()}
                 className="inline-flex items-center justify-center gap-1.5 rounded bg-primary py-2.5 text-xs font-black text-white disabled:bg-text-muted"
               >
                 <ArrowDownToLine size={15} /> Hold & Print
@@ -591,7 +733,7 @@ export default function CounterSales() {
           <button
             type="button"
             disabled={!cart.length || (selectedTable !== 'Takeaway' && !currentActiveOrder) || loading}
-            onClick={handleSettleBill}
+            onClick={() => handleSettleBill()}
             className="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded bg-emerald-600 py-2.5 text-xs font-black text-white disabled:bg-text-muted"
           >
             <Printer size={15} /> Settle Bill (Cash)
@@ -613,6 +755,49 @@ export default function CounterSales() {
           )}
         </div>
       </aside>
+
+      {/* Non-Availability Checkout Interceptor Modal */}
+      {unavailableModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white border border-[#eadfd7] rounded-lg shadow-2xl w-full max-w-md p-6 space-y-4 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600 mx-auto">
+              <Trash2 size={24} />
+            </span>
+            <div>
+              <h3 className="text-base font-black text-text-dark uppercase tracking-wider">Out of Stock Items Detected</h3>
+              <p className="text-xs font-semibold text-text-muted mt-1">
+                The following items in your cart are currently marked Out of Stock:
+              </p>
+            </div>
+            
+            <div className="bg-red-50/50 rounded border border-red-100 p-3 text-left space-y-1.5">
+              {unavailableModal.items.map((item) => (
+                <div key={item.portion_id} className="flex justify-between items-center text-xs font-bold text-red-800">
+                  <span>{item.name}</span>
+                  <span>Qty: {item.quantity}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setUnavailableModal(null)}
+                className="h-10 rounded border border-[#eadfd7] bg-white text-xs font-black uppercase text-text-dark hover:bg-gray-50"
+              >
+                Freshly Edit Cart
+              </button>
+              <button
+                type="button"
+                onClick={unavailableModal.onConfirm}
+                className="h-10 rounded bg-red-600 text-xs font-black uppercase text-white hover:bg-red-700"
+              >
+                Remove & Proceed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

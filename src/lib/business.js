@@ -22,7 +22,8 @@ export function sortOrders(orders) {
 }
 
 export function activeToday(order) {
-  return dayjs(order.created_at).isSame(dayjs(), 'day') && !['completed', 'rejected'].includes(order.status);
+  const isOnline = order.source === 'whatsapp' || order.source === 'swiggy';
+  return isOnline && dayjs(order.created_at).isSame(dayjs(), 'day') && !['completed', 'rejected'].includes(order.status) && order.payment_confirmed;
 }
 
 export function completedToday(order) {

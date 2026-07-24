@@ -7,13 +7,68 @@ import { useCashStore } from '../store/cashStore';
 import { useExpenseStore } from '../store/expenseStore';
 import { useInventoryStore } from '../store/inventoryStore';
 import { useOrderStore } from '../store/orderStore';
-import { useState } from 'react';
+import { useAppStore } from '../store/appStore';
+import ReportDateFilter from '../components/ReportDateFilter';
+import { useState, useMemo } from 'react';
 
 export default function DailySummary() {
   const [mode, setMode] = useState('today');
+  const startDate = useAppStore((state) => state.reportStartDate);
+  const endDate = useAppStore((state) => state.reportEndDate);
+
   const todayOrders = useOrderStore((state) => state.orders).filter(
-    (order) => order.status === 'completed' && order.payment_confirmed && String(order.date || order.created_at || '').slice(0, 10) === todayISO()
+    (order) => order.status === 'completed' && order.payment_confirmed && String(order.date || order.created_at || '').slice(0, 10) >= startDate && String(order.date || order.created_at || '').slice(0, 10) <= endDate
   );
+
+  const peakHourData = useMemo(() => {
+    const hours = Array.from({ length: 24 }, (_, i) => ({
+      hourNum: i,
+      hourLabel: i === 0 ? '12 AM' : i === 12 ? '12 PM' : i > 12 ? `${i - 12} PM` : `${i} AM`,
+      sales: 0
+    }));
+    todayOrders.forEach((order) => {
+      const dateStr = order.created_at || order.date;
+      if (!dateStr) return;
+      const hour = new Date(dateStr).getHours();
+      if (hours[hour]) {
+        hours[hour].sales += Number(order.total_amount || 0);
+      }
+    });
+    return hours.filter((h) => h.sales > 0);
+  }, [todayOrders]);
+
+  const menuItems = useInventoryStore((state) => state.menuItems);
+
+  const itemProfitability = useMemo(() => {
+    const itemsMap = {};
+    todayOrders.forEach((order) => {
+      (order.items || []).forEach((item) => {
+        const itemId = item.menu_item_id || item.id;
+        if (!itemId) return;
+        if (!itemsMap[itemId]) {
+          itemsMap[itemId] = {
+            name: item.name,
+            qty: 0,
+            revenue: 0
+          };
+        }
+        itemsMap[itemId].qty += Number(item.qty || item.quantity || 1);
+        itemsMap[itemId].revenue += Number(item.price || 0) * Number(item.qty || item.quantity || 1);
+      });
+    });
+
+    return Object.entries(itemsMap).map(([id, info]) => {
+      const dbItem = menuItems.find((m) => m.id === id);
+      const margin = dbItem ? 60 : 55;
+      return {
+        id,
+        name: info.name,
+        qty: info.qty,
+        revenue: info.revenue,
+        margin
+      };
+    }).sort((a, b) => b.revenue - a.revenue);
+  }, [todayOrders, menuItems]);
 
   const whatsapp = todayOrders
     .filter((order) => order.source === 'whatsapp')
@@ -31,17 +86,25 @@ export default function DailySummary() {
     .filter((order) => order.source === 'counter' && order.order_type === 'dine_in')
     .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
 
-  const dineInManual = useCashStore((state) => state.totalToday());
+  const dineInSales = useCashStore((state) => state.dineInSales);
+  const dineInManual = dineInSales
+    .filter((sale) => String(sale.date || '').slice(0, 10) >= startDate && String(sale.date || '').slice(0, 10) <= endDate)
+    .reduce((sum, sale) => sum + Number(sale.amount || 0), 0);
   const dineIn = dineInPOS + dineInManual;
 
   const orderCount = todayOrders.length;
-  const expenseTotal = useExpenseStore((state) => state.totalToday());
-  const expenseCount = useExpenseStore((state) => state.expenses.filter((expense) => expense.date === todayISO()).length);
-  const menuItems = useInventoryStore((state) => state.menuItems);
+  const expenses = useExpenseStore((state) => state.expenses);
+  const activeExpenses = expenses.filter(
+    (e) => String(e.date || '').slice(0, 10) >= startDate && String(e.date || '').slice(0, 10) <= endDate
+  );
+  const expenseTotal = activeExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const expenseCount = activeExpenses.length;
+
+  // menuItems already declared above
   const batchLogs = useInventoryStore((state) => state.batchLogs);
   const sales = whatsapp + swiggy + takeaway + dineIn;
   const profit = sales - expenseTotal;
-  const todayBatches = batchLogs.filter((batch) => batch.date === todayISO());
+  const todayBatches = batchLogs.filter((batch) => String(batch.date || '').slice(0, 10) >= startDate && String(batch.date || '').slice(0, 10) <= endDate);
   const cooked = todayBatches.reduce((sum, batch) => sum + Number(batch.kg_cooked || 0), 0);
   const sold = todayBatches.reduce((sum, batch) => sum + Number(batch.kg_sold || 0), 0);
   const wasted = Math.max(0, cooked - sold);
@@ -69,11 +132,12 @@ export default function DailySummary() {
     <section className="h-full overflow-y-auto bg-[#f7f1ec] p-5 scrollbar-none">
       <header className="mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-black text-text-dark">Today's Summary</h1>
+          <h1 className="text-xl font-black text-text-dark">Summary & Reports</h1>
           <p className="mt-1 text-[13px] font-semibold text-text-muted">Sales, cost, batch movement, and waste at a glance.</p>
         </div>
-        <span className="rounded-full border border-[#eadfd7] bg-white px-3 py-1 text-[13px] font-bold text-text-muted">{dayjs().format('D MMMM YYYY')}</span>
       </header>
+
+      <ReportDateFilter />
 
       <div className="mb-4 grid grid-cols-2 rounded-sm border border-[#eadfd7] bg-white p-1">
         {['today', 'week'].map((item) => (
@@ -119,6 +183,50 @@ export default function DailySummary() {
                 <InventoryBar value={item.value} max={sales || 1} color={item.fill} />
               </div>
             ))}
+          </div>
+
+          {/* Peak Hours Chart */}
+          <div className="mt-4 rounded-sm border border-[#eadfd7] bg-white p-4 shadow-card">
+            <h2 className="mb-3 text-[14px] font-black text-text-muted">PEAK SALES HOURS</h2>
+            {peakHourData.length === 0 ? (
+              <p className="text-sm font-semibold text-text-muted">No sales hourly distribution available.</p>
+            ) : (
+              <div className="h-44">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={peakHourData}>
+                    <XAxis dataKey="hourLabel" tick={{ fill: '#282C3F', fontSize: 11, fontWeight: 700 }} />
+                    <YAxis tickFormatter={(val) => `₹${val}`} tick={{ fill: '#282C3F', fontSize: 11, fontWeight: 700 }} />
+                    <Bar dataKey="sales" fill="#FC8019" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          {/* Menu Item Profitability Analysis */}
+          <div className="mt-4 rounded-sm border border-[#eadfd7] bg-white p-4 shadow-card">
+            <h2 className="mb-3 text-[14px] font-black text-text-muted">MENU MARGIN & VOLUME MATRIX</h2>
+            {itemProfitability.length === 0 ? (
+              <p className="text-sm font-semibold text-text-muted">No item sales volume logged today.</p>
+            ) : (
+              <div className="space-y-3">
+                {itemProfitability.slice(0, 5).map((item) => (
+                  <div key={item.id} className="rounded border border-[#f0e4db] bg-[#fffcf9] p-3 text-xs">
+                    <div className="flex justify-between items-center font-bold text-text-dark">
+                      <span className="text-[13px] font-black">{item.name}</span>
+                      <span>{item.qty} portions sold · {formatINR(item.revenue)}</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-4 text-text-muted font-bold text-[10px]">
+                      <span>EST. MARGIN: {item.margin}%</span>
+                      <span>EST. PROFIT: {formatINR(item.revenue * (item.margin / 100))}</span>
+                    </div>
+                    <div className="mt-1.5 h-2 w-full bg-[#eadfd7] rounded-full overflow-hidden">
+                      <div className="h-full bg-success rounded-full" style={{ width: `${item.margin}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </>
       ) : (

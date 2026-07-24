@@ -6,6 +6,8 @@ import { dateTitle, formatINR, todayISO } from '../lib/format';
 import { getSwiggySettings, hasSwiggyBridge } from '../lib/swiggyBridge';
 import { useInventoryStore } from '../store/inventoryStore';
 import { useOrderStore } from '../store/orderStore';
+import { useAppStore } from '../store/appStore';
+import ReportDateFilter from '../components/ReportDateFilter';
 import CashLedger from './CashLedger';
 
 const sourceOptions = [
@@ -70,7 +72,8 @@ function orderDate(order) {
 export default function CompletedSales() {
   const [viewType, setViewType] = useState('sales'); // 'sales' or 'cash'
   const [source, setSource] = useState('swiggy');
-  const [date, setDate] = useState(todayISO());
+  const startDate = useAppStore((state) => state.reportStartDate);
+  const endDate = useAppStore((state) => state.reportEndDate);
   const orders = useOrderStore((state) => state.orders);
   const mergeImportedOrders = useOrderStore((state) => state.mergeImportedOrders);
   const inventory = useInventoryStore((state) => ({
@@ -86,12 +89,13 @@ export default function CompletedSales() {
   }, [mergeImportedOrders]);
   const completedOrders = useMemo(() => orders.filter((order) => {
     if (order.status !== 'completed' || !order.payment_confirmed) return false;
-    if (orderDate(order) !== date) return false;
+    const oDate = orderDate(order);
+    if (oDate < startDate || oDate > endDate) return false;
     if (source === 'all') return true;
     if (source === 'takeaway') return order.source === 'counter' && order.order_type === 'takeaway';
     if (source === 'dine_in') return order.source === 'counter' && order.order_type === 'dine_in';
     return order.source === source;
-  }), [orders, source, date]);
+  }), [orders, source, startDate, endDate]);
   const rows = useMemo(() => buildRows(completedOrders), [completedOrders]);
   const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
   const totalSales = completedOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
@@ -155,6 +159,8 @@ export default function CompletedSales() {
             </div>
           </header>
 
+          <ReportDateFilter />
+
           <div className="mb-4 grid grid-cols-5 rounded-sm border border-[#eadfd7] bg-white p-1">
             {sourceOptions.map((option) => (
               <button
@@ -170,19 +176,6 @@ export default function CompletedSales() {
             ))}
           </div>
 
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-[#eadfd7] bg-white p-3">
-            <div>
-              <p className="text-[13px] font-black uppercase text-text-muted">Sales date</p>
-              <p className="mt-1 text-[15px] font-bold text-text-dark">{dateTitle(date)}</p>
-            </div>
-            <input
-              type="date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
-              className="h-11 rounded-sm border border-[#eadfd7] px-3 text-[15px] font-black text-text-dark"
-            />
-          </div>
-
           <div className="mb-4 grid grid-cols-3 gap-3">
             <Metric label="Orders" value={completedOrders.length} />
             <Metric label="Items Sold" value={totalQuantity} />
@@ -190,7 +183,7 @@ export default function CompletedSales() {
           </div>
 
           {!rows.length ? (
-            <EmptyState>No completed sales found for {dateTitle(date)}.</EmptyState>
+            <EmptyState>No completed sales found for this period.</EmptyState>
           ) : (
             <div className="overflow-x-auto rounded-sm border border-[#eadfd7] bg-white shadow-card">
               <div className="grid min-w-[720px] grid-cols-[minmax(220px,1fr)_120px_100px_130px_140px] border-b border-[#eadfd7] bg-[#fff6ef] px-4 py-3 text-[13px] font-black uppercase text-text-muted">

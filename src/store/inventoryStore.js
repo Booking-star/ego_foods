@@ -29,13 +29,78 @@ function persistInventory(state) {
   });
 }
 
-export function recipeDeductionAmount(recipe, kgCooked, ingredientUnit) {
-  const baseQuantity = Number(recipe.base_quantity || 1);
-  const baseUnit = recipe.base_unit || 'kg';
-  const cookedInBaseUnit = convertUnit(Number(kgCooked || 0), 'kg', baseUnit);
-  const multiplier = baseQuantity ? cookedInBaseUnit / baseQuantity : Number(kgCooked || 0);
-  const amountInRecipeUnit = multiplier * Number(recipe.quantity || recipe.quantity_per_kg || 0);
-  return convertUnit(amountInRecipeUnit, recipe.unit, ingredientUnit);
+const getUnitBaseFactor = (unit) => {
+  const u = (unit || "kg").toLowerCase().trim();
+  if (["kg", "kilogram", "kilograms", "l", "litre", "litres", "liter", "liters"].includes(u)) return 1000;
+  if (["dozen", "dozens"].includes(u)) return 12;
+  return 1;
+};
+
+async function calculateIngredientsDeduction(supabase, menuItemId, kgQuantity) {
+  const { data: portions } = await supabase.from('portions').select('*').eq('menu_item_id', menuItemId);
+  if (!portions || portions.length === 0) return {};
+  
+  const portion = portions.find(p => p.is_default) || portions[0];
+  const portionGrams = Number(portion.grams || 400);
+  
+  const { data: menuComps } = await supabase.from('menu_item_components').select('*').eq('portion_id', portion.id);
+  const { data: recipeComps } = await supabase.from('recipe_components').select('*');
+  const { data: recipes } = await supabase.from('recipes').select('*');
+  const { data: dbIngredients } = await supabase.from('ingredients').select('*');
+  
+  const totalGramsCooked = Number(kgQuantity) * 1000;
+  const portionsCount = totalGramsCooked / portionGrams;
+  
+  const baseDeductions = {};
+  
+  const resolveRecipeIngredients = (recipeId, fraction) => {
+    const comps = recipeComps?.filter(rc => rc.recipe_id === recipeId) || [];
+    for (const rc of comps) {
+      if (rc.component_type === 'ingredient' && rc.ingredient_id) {
+        const qty = Number(rc.quantity_in_base_unit || rc.quantity) * fraction;
+        baseDeductions[rc.ingredient_id] = (baseDeductions[rc.ingredient_id] || 0) + qty;
+      } else if (rc.component_type === 'recipe' && rc.child_recipe_id) {
+        const childRecipe = recipes?.find(r => r.id === rc.child_recipe_id);
+        if (childRecipe) {
+          const childOutputBase = Number(childRecipe.output_quantity_in_base_unit || 1000);
+          const childQtyUsed = Number(rc.quantity_in_base_unit || rc.quantity);
+          const childFraction = (childQtyUsed * fraction) / childOutputBase;
+          resolveRecipeIngredients(rc.child_recipe_id, childFraction);
+        }
+      }
+    }
+  };
+
+  for (const comp of (menuComps || [])) {
+    if (comp.component_type === 'ingredient' || comp.component_type === 'packaging') {
+      const ingId = comp.ingredient_id;
+      if (ingId) {
+        const qty = Number(comp.quantity_in_base_unit || comp.quantity) * portionsCount;
+        baseDeductions[ingId] = (baseDeductions[ingId] || 0) + qty;
+      }
+    } else if (comp.component_type === 'recipe') {
+      const recipeId = comp.recipe_id;
+      const recipe = recipes?.find(r => r.id === recipeId);
+      if (recipe) {
+        const recipeOutputBase = Number(recipe.output_quantity_in_base_unit || 1000);
+        const recipeQtyUsedPerPortion = Number(comp.quantity_in_base_unit || comp.quantity);
+        const recipeGramsCooked = recipeQtyUsedPerPortion * portionsCount;
+        const recipeFraction = recipeGramsCooked / recipeOutputBase;
+        resolveRecipeIngredients(recipeId, recipeFraction);
+      }
+    }
+  }
+
+  const finalDeductions = {};
+  for (const [ingId, qtyBase] of Object.entries(baseDeductions)) {
+    const ing = dbIngredients?.find(i => i.id === ingId);
+    if (ing) {
+      const factor = getUnitBaseFactor(ing.unit);
+      finalDeductions[ingId] = qtyBase / factor;
+    }
+  }
+  
+  return finalDeductions;
 }
 
 export const useInventoryStore = create((set, get) => ({
@@ -62,21 +127,28 @@ export const useInventoryStore = create((set, get) => ({
     });
   },
   logBatch: async (menuItemId, kgCooked) => {
-    const recipes = get().recipes.filter((recipe) => recipe.menu_item_id === menuItemId);
+    let deductionsMap = {};
     const ingredients = get().ingredients;
-    const deductions = recipes.map((recipe) => {
-      const ingredient = ingredients.find((item) => item.id === recipe.ingredient_id);
-      return {
-        recipe,
-        ingredient,
-        amount: recipeDeductionAmount(recipe, kgCooked, ingredient?.unit || recipe.unit)
-      };
-    });
-    const shortage = deductions.find(({ ingredient, amount }) => !ingredient || Number(ingredient.current_stock) - amount < 0);
-    if (shortage) {
+    if (supabase) {
+      deductionsMap = await calculateIngredientsDeduction(supabase, menuItemId, kgCooked);
+    }
+    
+    let shortageIngredient = null;
+    let shortageAmount = 0;
+    
+    for (const [ingId, amount] of Object.entries(deductionsMap)) {
+      const ingredient = ingredients.find(i => i.id === ingId);
+      if (!ingredient || Number(ingredient.current_stock) - amount < 0) {
+        shortageIngredient = ingredient;
+        shortageAmount = amount;
+        break;
+      }
+    }
+    
+    if (shortageIngredient) {
       return {
         ok: false,
-        message: `Not enough ${shortage.ingredient?.name || 'ingredient'} in stock. You have ${shortage.ingredient?.current_stock || 0} ${shortage.ingredient?.unit || ''} but this batch needs ${shortage.amount.toFixed(2)} ${shortage.recipe.unit}.`
+        message: `Not enough ${shortageIngredient.name} in stock. You have ${shortageIngredient.current_stock} ${shortageIngredient.unit} but this batch needs ${shortageAmount.toFixed(2)} ${shortageIngredient.unit}.`
       };
     }
 
@@ -93,11 +165,13 @@ export const useInventoryStore = create((set, get) => ({
     if (supabase) {
       const { error: batchError } = await supabase.from('batch_logs').insert(batch);
       if (batchError) return { ok: false, message: batchError.message };
-      for (const { ingredient, amount } of deductions) {
+      for (const [ingId, amount] of Object.entries(deductionsMap)) {
+        const ingredient = ingredients.find(i => i.id === ingId);
+        const nextStock = Number(ingredient.current_stock) - amount;
         const { error } = await supabase
           .from('ingredients')
-          .update({ current_stock: Number(ingredient.current_stock) - amount })
-          .eq('id', ingredient.id);
+          .update({ current_stock: nextStock })
+          .eq('id', ingId);
         if (error) return { ok: false, message: error.message };
       }
     }
@@ -107,9 +181,9 @@ export const useInventoryStore = create((set, get) => ({
         ...state,
         batchLogs: [batch, ...state.batchLogs],
         ingredients: state.ingredients.map((ingredient) => {
-        const deduction = deductions.find((item) => item.ingredient?.id === ingredient.id);
-        return deduction ? { ...ingredient, current_stock: Number(ingredient.current_stock) - deduction.amount } : ingredient;
-      })
+          const deductionAmount = deductionsMap[ingredient.id];
+          return deductionAmount ? { ...ingredient, current_stock: Number(ingredient.current_stock) - deductionAmount } : ingredient;
+        })
       };
       persistInventory(next);
       return { batchLogs: next.batchLogs, ingredients: next.ingredients };
@@ -131,18 +205,53 @@ export const useInventoryStore = create((set, get) => ({
     });
     return { ok: true, ingredient, quantity, amount };
   },
+  updateStockAndThreshold: async (ingredientId, nextStock, nextThreshold) => {
+    if (supabase) {
+      const { error } = await supabase
+        .from('ingredients')
+        .update({ current_stock: nextStock, low_stock_threshold: nextThreshold })
+        .eq('id', ingredientId);
+      if (error) return { ok: false, message: error.message };
+    }
+    set((state) => {
+      const ingredients = state.ingredients.map((item) =>
+        item.id === ingredientId ? { ...item, current_stock: nextStock, low_stock_threshold: nextThreshold } : item
+      );
+      persistInventory({ ...state, ingredients });
+      return { ingredients };
+    });
+    return { ok: true };
+  },
   addSoldKg: async (menuItemId, kg) => {
     const today = todayISO();
     const todayBatch = get().batchLogs.find((batch) => batch.menu_item_id === menuItemId && batch.date === today);
-    if (!todayBatch) return;
-    const nextSold = Number(todayBatch.kg_sold || 0) + Number(kg || 0);
+    const nextSold = todayBatch ? Number(todayBatch.kg_sold || 0) + Number(kg || 0) : Number(kg || 0);
+    
+    let deductionsMap = {};
     if (supabase) {
-      await supabase.from('batch_logs').update({ kg_sold: nextSold }).eq('id', todayBatch.id);
+      if (todayBatch) {
+        await supabase.from('batch_logs').update({ kg_sold: nextSold }).eq('id', todayBatch.id);
+      }
+      deductionsMap = await calculateIngredientsDeduction(supabase, menuItemId, kg);
+      for (const [ingId, amount] of Object.entries(deductionsMap)) {
+        const ingredient = get().ingredients.find(i => i.id === ingId);
+        if (ingredient) {
+          const nextStock = Number(ingredient.current_stock) - amount;
+          await supabase.from('ingredients').update({ current_stock: nextStock }).eq('id', ingId);
+        }
+      }
     }
+    
     set((state) => {
-      const batchLogs = state.batchLogs.map((batch) => (batch.id === todayBatch.id ? { ...batch, kg_sold: nextSold } : batch));
-      persistInventory({ ...state, batchLogs });
-      return { batchLogs };
+      const batchLogs = todayBatch 
+        ? state.batchLogs.map((batch) => (batch.id === todayBatch.id ? { ...batch, kg_sold: nextSold } : batch))
+        : state.batchLogs;
+      const ingredients = state.ingredients.map((ingredient) => {
+        const deductionAmount = deductionsMap[ingredient.id];
+        return deductionAmount ? { ...ingredient, current_stock: Number(ingredient.current_stock) - deductionAmount } : ingredient;
+      });
+      persistInventory({ ...state, batchLogs, ingredients });
+      return { batchLogs, ingredients };
     });
   },
   addIngredient: async (input) => {
@@ -340,6 +449,12 @@ export const useInventoryStore = create((set, get) => ({
       const externalMappings = exists
           ? state.externalMappings.map((item) => (item.id === next.id || (item.source === next.source && item.external_item_name === next.external_item_name) ? next : item))
           : [next, ...state.externalMappings];
+      persistInventory({ ...state, externalMappings });
+      return { externalMappings };
+    }),
+  deleteExternalMapping: (id) =>
+    set((state) => {
+      const externalMappings = state.externalMappings.filter((item) => item.id !== id);
       persistInventory({ ...state, externalMappings });
       return { externalMappings };
     })

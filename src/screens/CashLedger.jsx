@@ -6,10 +6,15 @@ import { formatINR, todayISO } from '../lib/format';
 import { useCashStore } from '../store/cashStore';
 import { useExpenseStore } from '../store/expenseStore';
 import { useOrderStore } from '../store/orderStore';
+import { useAppStore } from '../store/appStore';
+import ReportDateFilter from '../components/ReportDateFilter';
 
 export default function CashLedger() {
+  const startDate = useAppStore((state) => state.reportStartDate);
+  const endDate = useAppStore((state) => state.reportEndDate);
+
   const todayOrders = useOrderStore((state) => state.orders).filter(
-    (order) => order.status === 'completed' && order.payment_confirmed && String(order.date || order.created_at || '').slice(0, 10) === todayISO()
+    (order) => order.status === 'completed' && order.payment_confirmed && String(order.date || order.created_at || '').slice(0, 10) >= startDate && String(order.date || order.created_at || '').slice(0, 10) <= endDate
   );
 
   const whatsapp = todayOrders
@@ -28,19 +33,26 @@ export default function CashLedger() {
     .filter((order) => order.source === 'counter' && order.order_type === 'dine_in')
     .reduce((sum, order) => sum + Number(order.total_amount || 0), 0);
 
-  const dineInManual = useCashStore((state) => state.totalToday());
+  const dineInSales = useCashStore((state) => state.dineInSales);
+  const dineInManual = dineInSales
+    .filter((sale) => String(sale.date || '').slice(0, 10) >= startDate && String(sale.date || '').slice(0, 10) <= endDate)
+    .reduce((sum, sale) => sum + Number(sale.amount || 0), 0);
   const dineIn = dineInPOS + dineInManual;
 
   const addDineInSale = useCashStore((state) => state.addDineInSale);
   const expenses = useExpenseStore((state) => state.expenses);
-  const expenseTotal = useExpenseStore((state) => state.totalToday());
+  const activeExpenses = expenses.filter(
+    (e) => String(e.date || '').slice(0, 10) >= startDate && String(e.date || '').slice(0, 10) <= endDate
+  );
+  const expenseTotal = activeExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const totalIn = whatsapp + swiggy + takeaway + dineIn;
   const cash = totalIn - expenseTotal;
-  const market = expenses.filter((expense) => expense.type === 'market_purchase').reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const market = activeExpenses.filter((expense) => expense.type === 'market_purchase').reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
   const other = expenseTotal - market;
 
   async function save() {
@@ -65,10 +77,11 @@ export default function CashLedger() {
           <h1 className="text-xl font-black text-text-dark">Cash Ledger</h1>
           <p className="mt-1 text-[13px] font-semibold text-text-muted">Transparent cash flow from paid orders, counter sales, and expenses.</p>
         </div>
-        <span className="rounded-full border border-[#eadfd7] bg-white px-3 py-1 text-[13px] font-bold text-text-muted">Today</span>
       </header>
 
-      {totalIn === 0 && expenseTotal === 0 ? <EmptyState>No sales or expenses recorded today yet.</EmptyState> : null}
+      <ReportDateFilter />
+
+      {totalIn === 0 && expenseTotal === 0 ? <EmptyState>No sales or expenses recorded in this period yet.</EmptyState> : null}
 
       <div className="rounded-sm border border-[#eadfd7] bg-white p-5 text-center shadow-card">
         <p className="text-[14px] font-black text-text-muted">CASH IN HAND RIGHT NOW</p>
