@@ -405,7 +405,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen min-h-[680px] w-screen overflow-hidden bg-bg-secondary text-text-dark" data-app-scroll>
-      <aside className="flex w-[164px] shrink-0 flex-col border-r border-[#eadfd7] bg-[#fffaf6] text-[#4b2b19] scrollbar-none max-[860px]:w-[82px]">
+      <aside className="flex w-[164px] shrink-0 flex-col border-r border-[#eadfd7] bg-white/70 backdrop-blur-md text-[#4b2b19] scrollbar-none max-[860px]:w-[82px]">
         <button
           type="button"
           onClick={() => setTab('orders')}
@@ -428,19 +428,21 @@ export default function App() {
                 type="button"
                 onClick={() => setTab(id)}
                 aria-label={label}
-                className={`relative flex w-full items-center gap-3 rounded-sm border-r-2 px-3 py-2 text-left text-[13px] font-bold ${
-                  active ? 'border-primary bg-[#fff0e5] text-[#9a3f00]' : 'border-transparent text-[#5a4b42] hover:bg-[#fff4eb]'
+                className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-extrabold transition-all duration-200 ${
+                  active ? 'bg-primary text-white shadow-lg shadow-primary/30 scale-[1.02]' : 'text-[#5a4b42] hover:bg-[#fff4eb] hover:translate-x-0.5'
                 }`}
               >
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center">
                   <Icon size={17} />
                 </span>
                 <span className="max-[860px]:hidden">{label}</span>
-                {id === 'orders' && activeCount > 0 ? (
-                  <span className="absolute right-2 top-1 flex min-w-5 items-center justify-center rounded-full bg-danger px-1 text-[11px] font-black text-white">
-                    {activeCount}
-                  </span>
-                ) : null}
+                 {id === 'orders' && activeCount > 0 ? (
+                   <span className={`absolute right-2.5 top-3 flex min-w-5 h-5 items-center justify-center rounded-full text-[10px] font-black px-1 border transition-all ${
+                     active ? 'bg-white text-[#9a3f00] border-white' : 'bg-danger text-white border-transparent'
+                   }`}>
+                     {activeCount}
+                   </span>
+                 ) : null}
               </button>
             );
           })}
