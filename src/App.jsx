@@ -417,7 +417,7 @@ export default function App() {
           </span>
           <span className="text-[14px] font-black leading-4 max-[860px]:hidden">EGO FOODS</span>
         </button>
-        <nav className="flex w-full flex-1 flex-col gap-1 px-2 py-4">
+        <nav className="flex w-full flex-1 flex-col gap-1 px-2 py-4 overflow-y-auto scrollbar-none">
           {navItems
             .filter((item) => item.roles.includes(currentUser) && (item.id === 'settings' || !hiddenTabs.includes(item.id)))
             .map(({ id, label, icon: Icon }) => {
