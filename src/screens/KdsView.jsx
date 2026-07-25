@@ -60,7 +60,7 @@ export default function KdsView() {
         ) : (
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {preparingOrders.map((order) => {
-              const elapsedMins = currentTime.diff(dayjs(order.created_at), 'minute');
+              const elapsedMins = currentTime.diff(dayjs(order.updated_at || order.created_at), 'minute');
               const isOverrun = elapsedMins >= 15;
               const sourceLabel = order.source === 'swiggy' ? 'Swiggy' : order.source === 'counter' ? 'Counter' : 'WhatsApp';
 
