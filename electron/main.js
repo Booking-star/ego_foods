@@ -249,7 +249,7 @@ function createWindow() {
 
   const distHtml = path.join(__dirname, '..', 'dist', 'index.html');
   mainWindow.loadFile(distHtml);
-  // mainWindow.webContents.openDevTools();
+  mainWindow.maximize();
 }
 
 async function startPrintJobPolling() {
