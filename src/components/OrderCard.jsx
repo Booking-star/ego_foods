@@ -115,7 +115,7 @@ export default function OrderCard({
     <>
       <article
         onClick={() => dismissAlarmForOrder(order.id)}
-        className={`relative rounded-sm border border-[#eadfd7] bg-white shadow-card ${isPulsing ? 'pulse-danger' : ''} ${muted ? 'opacity-75' : ''}`}
+        className={`relative rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md shadow-card hover:scale-[1.01] hover:shadow-lg transition-all duration-200 ${isPulsing ? 'pulse-danger' : ''} ${muted ? 'opacity-75' : ''}`}
         style={{ borderTop: `4px solid ${meta.border}` }}
       >
         <div className="p-3">

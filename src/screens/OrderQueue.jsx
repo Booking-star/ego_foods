@@ -69,7 +69,7 @@ export default function OrderQueue() {
   }
 
   return (
-    <section className="flex h-full flex-col bg-[#f7f1ec]">
+    <section className="flex h-full flex-col bg-transparent">
       {tabCounts.new > 0 ? (
         <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 bg-[#bc1414] px-5 text-white">
           <div className="flex items-center gap-2 text-[13px] font-black uppercase">
@@ -82,7 +82,7 @@ export default function OrderQueue() {
         </div>
       ) : null}
 
-      <div className="grid min-h-[64px] shrink-0 grid-cols-2 border-b border-[#eadfd7] bg-[#fffaf6] px-4">
+      <div className="grid min-h-[64px] shrink-0 grid-cols-2 border-b border-[#eadfd7]/60 bg-white/70 backdrop-blur-md px-4">
         {orderTabs.map((tab) => {
           const activeTab = queueTab === tab.id;
           return (
@@ -90,8 +90,8 @@ export default function OrderQueue() {
               key={tab.id}
               type="button"
               onClick={() => setQueueTab(tab.id)}
-              className={`relative min-h-[64px] min-w-0 px-2 text-left text-[14px] font-bold ${
-                activeTab ? 'text-[#a74608]' : 'text-text-muted hover:text-text-dark'
+              className={`relative min-h-[64px] min-w-0 px-2 text-left text-[14px] font-extrabold transition-all ${
+                activeTab ? 'text-primary' : 'text-text-muted hover:text-text-dark'
               }`}
             >
               <span className="block truncate">{tab.label}</span>
@@ -109,14 +109,14 @@ export default function OrderQueue() {
             <p className="mt-1 text-[13px] font-semibold text-text-muted">Accept paid WhatsApp orders, track preparation, and finish pickup.</p>
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={() => setTimeAsc((value) => !value)} className="inline-flex min-h-10 items-center gap-2 rounded-sm border border-[#eadfd7] bg-white px-3 text-[13px] font-bold text-text-dark">
+            <button type="button" onClick={() => setTimeAsc((value) => !value)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md px-4 text-[13px] font-extrabold text-text-dark shadow-sm hover:scale-[1.01] transition-transform">
               <TimerReset size={15} /> {timeAsc ? 'Time Ascending' : 'Time Descending'}
             </button>
           </div>
         </div>
 
         {paidNewOrders.length > 0 ? (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-[#eadfd7] bg-white px-4 py-3">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#eadfd7]/60 bg-white/75 backdrop-blur-md px-4 py-3 shadow-sm">
             <p className="text-[13px] font-bold text-text-dark">
               {selected.size} selected paid new orders. Bulk action applies only to paid new cards.
             </p>
