@@ -35,12 +35,16 @@ export default function SettingsScreen() {
     mascotEnabled,
     minimizeNotificationEnabled,
     repeatIntervalSeconds,
+    customVoiceSingle,
+    customVoicePlural,
     setAlertMode,
     setAlarmVolume,
     setVoiceVolume,
     setMascotEnabled,
     setMinimizeNotificationEnabled,
-    setRepeatIntervalSeconds
+    setRepeatIntervalSeconds,
+    setCustomVoiceSingle,
+    setCustomVoicePlural
   } = useAlertStore();
 
   useEffect(() => {
@@ -60,7 +64,12 @@ export default function SettingsScreen() {
   };
 
   const handleTestVoice = () => {
-    alertManager.playAudio(alertManager.voiceSingle, voiceVolume);
+    const isDefault = customVoiceSingle === 'Hey Boss! You have got a new order.';
+    if (isDefault) {
+      alertManager.playAudio(alertManager.voiceSingle, voiceVolume);
+    } else {
+      alertManager.speakText(customVoiceSingle, voiceVolume);
+    }
   };
 
   return (
@@ -206,6 +215,34 @@ export default function SettingsScreen() {
                   className="mt-1.5 h-11 w-full rounded border border-[#eadfd7] bg-white px-3 text-xs font-bold text-text-dark outline-none"
                 />
               </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block">
+                  <span className="text-[11px] font-black uppercase text-text-muted">Voice Sentence (Single Order)</span>
+                  <input
+                    type="text"
+                    value={customVoiceSingle}
+                    onChange={(e) => setCustomVoiceSingle(e.target.value)}
+                    className="mt-1.5 h-11 w-full rounded border border-[#eadfd7] bg-white px-3 text-xs font-bold text-text-dark outline-none focus:border-primary"
+                    placeholder="e.g. Hey Boss! You have got a new order."
+                  />
+                </label>
+              </div>
+
+              <div>
+                <label className="block">
+                  <span className="text-[11px] font-black uppercase text-text-muted">Voice Sentence (Multiple Orders)</span>
+                  <input
+                    type="text"
+                    value={customVoicePlural}
+                    onChange={(e) => setCustomVoicePlural(e.target.value)}
+                    className="mt-1.5 h-11 w-full rounded border border-[#eadfd7] bg-white px-3 text-xs font-bold text-text-dark outline-none focus:border-primary"
+                    placeholder="e.g. Hey Boss! You have new orders waiting."
+                  />
+                </label>
+              </div>
             </div>
 
             <div className="flex gap-2.5 pt-2">

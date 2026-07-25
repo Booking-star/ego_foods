@@ -25,18 +25,20 @@ export const useAlertStore = create((set, get) => ({
   mascotEnabled: localRead('kitchen-os.mascot-enabled', true),
   minimizeNotificationEnabled: localRead('kitchen-os.minimize-notification', true),
   repeatIntervalSeconds: localRead('kitchen-os.repeat-interval', 5),
-
+  customVoiceSingle: localRead('kitchen-os.voice-single-sentence', 'Hey Boss! You have got a new order.'),
+  customVoicePlural: localRead('kitchen-os.voice-plural-sentence', 'Hey Boss! You have new orders waiting.'),
+ 
   // Mascot and Speech state
   mascotState: 'idle', // 'idle' | 'new_order' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'low_stock' | 'printer_disconnected' | 'swiggy_import_success'
   speechText: '',
   showMascot: false,
   audioPermissionGranted: localRead('kitchen-os.audio-permission', false),
-
+ 
   // Dynamic context data
   toastMessage: null, // { type, text, id, duration }
   lowStockItemName: '',
   importedSwiggyCount: 0,
-
+ 
   setAlertMode: (mode) => {
     localWrite('kitchen-os.alert-mode', mode);
     set({ alertMode: mode });
@@ -60,6 +62,14 @@ export const useAlertStore = create((set, get) => ({
   setRepeatIntervalSeconds: (seconds) => {
     localWrite('kitchen-os.repeat-interval', seconds);
     set({ repeatIntervalSeconds: seconds });
+  },
+  setCustomVoiceSingle: (sentence) => {
+    localWrite('kitchen-os.voice-single-sentence', sentence);
+    set({ customVoiceSingle: sentence });
+  },
+  setCustomVoicePlural: (sentence) => {
+    localWrite('kitchen-os.voice-plural-sentence', sentence);
+    set({ customVoicePlural: sentence });
   },
   setAudioPermissionGranted: (granted) => {
     localWrite('kitchen-os.audio-permission', granted);

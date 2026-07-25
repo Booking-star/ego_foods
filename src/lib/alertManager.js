@@ -127,6 +127,23 @@ class AlertManager {
     }
   }
 
+  speakText(text, volume) {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.volume = volume;
+      
+      const voices = window.speechSynthesis.getVoices();
+      const inVoice = voices.find(v => v.lang === 'en-IN' || v.name.toLowerCase().includes('india') || v.name.toLowerCase().includes('indian'));
+      if (inVoice) utterance.voice = inVoice;
+      
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn('Speech synthesis failed:', e);
+    }
+  }
+
   startAlertCycle() {
     if (this.pendingOrders.size === 0) {
       this.cycleState = 'idle';
@@ -177,12 +194,11 @@ class AlertManager {
     const count = this.pendingOrders.size;
     const isPlural = count > 1;
 
+    const sentence = isPlural ? settings.customVoicePlural : settings.customVoiceSingle;
+
     // Animate mascot and display speech bubble
     if (settings.mascotEnabled) {
-      const bubbleText = isPlural 
-        ? 'Hey Boss! You have new orders waiting.' 
-        : 'Hey Boss! You have got a new order.';
-      settings.setMascotState('new_order', bubbleText);
+      settings.setMascotState('new_order', sentence);
     }
 
     // Trigger toast notification
@@ -190,9 +206,17 @@ class AlertManager {
 
     // Play Voice
     if (mode === 'alarm_voice' || mode === 'voice_only') {
-      const voiceNode = isPlural ? this.voicePlural : this.voiceSingle;
-      this.currentVoiceNode = voiceNode;
-      this.playAudio(voiceNode, settings.voiceVolume);
+      const isDefault = isPlural 
+        ? sentence === 'Hey Boss! You have new orders waiting.' 
+        : sentence === 'Hey Boss! You have got a new order.';
+      
+      if (isDefault) {
+        const voiceNode = isPlural ? this.voicePlural : this.voiceSingle;
+        this.currentVoiceNode = voiceNode;
+        this.playAudio(voiceNode, settings.voiceVolume);
+      } else {
+        this.speakText(sentence, settings.voiceVolume);
+      }
     }
 
     // Wait 5 seconds after voice (assume voice is 2.5s, wait total 5s)
