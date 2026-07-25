@@ -196,7 +196,7 @@ export default function App() {
         return;
       }
       try {
-        const [orders, menuItems, ingredients, recipes, batchLogs, expenses, dineInSales, portions, settings] = await Promise.all([
+        const [orders, menuItems, ingredients, recipes, batchLogs, expenses, dineInSales, portions, settings, menuItemComponents, recipeComponents] = await Promise.all([
           supabase.from('orders').select('*').order('created_at', { ascending: false }),
           supabase.from('menu_items').select('*').order('sort_order', { ascending: true }),
           supabase.from('ingredients').select('*').order('created_at', { ascending: true }),
@@ -205,7 +205,9 @@ export default function App() {
           supabase.from('expenses').select('*').order('logged_at', { ascending: false }),
           supabase.from('dinein_sales').select('*').order('logged_at', { ascending: false }),
           supabase.from('portions').select('*'),
-          supabase.from('restaurant_settings').select('table_count').limit(1).maybeSingle()
+          supabase.from('restaurant_settings').select('table_count').limit(1).maybeSingle(),
+          supabase.from('menu_item_components').select('*'),
+          supabase.from('recipe_components').select('*')
         ]);
         
         if (orders.error) {
@@ -243,14 +245,23 @@ export default function App() {
 
         window.kitchenOS?.logToFile(`Load Complete. menuItems count: ${menuItems.data?.length}, portions count: ${portions.data?.length}`);
 
-        if (!orders.error && orders.data?.length) setOrders(orders.data);
+        if (!orders.error && orders.data?.length) {
+          setOrders(orders.data);
+          // Catch up on any completed orders that haven't deducted stock yet
+          const pendingDeductions = orders.data.filter(o => o.status === 'completed' && !o.stock_deducted);
+          for (const order of pendingDeductions) {
+            useOrderStore.getState().deductRecipesForOrder(order);
+          }
+        }
         if (!menuItems.error && !ingredients.error && !recipes.error && !batchLogs.error && !portions.error) {
           setInventory({
             menuItems: menuItems.data?.length ? menuItems.data : sampleMenuItems,
             ingredients: ingredients.data?.length ? ingredients.data : sampleIngredients,
             recipes: recipes.data?.length ? recipes.data : sampleRecipes,
             batchLogs: batchLogs.data?.length ? batchLogs.data : sampleBatchLogs,
-            portions: (portions.data && portions.data.length > 0) ? portions.data : samplePortions
+            portions: (portions.data && portions.data.length > 0) ? portions.data : samplePortions,
+            menuItemComponents: menuItemComponents.data || [],
+            recipeComponents: recipeComponents.data || []
           });
         }
         if (!expenses.error && expenses.data) useExpenseStore.setState({ expenses: expenses.data });
@@ -275,9 +286,7 @@ export default function App() {
       onInsert: (order) => {
         addOrder(order);
         if (order.status === 'completed') {
-          const { menuItems } = useInventoryStore.getState();
-          const soldByMenu = orderPortionKgByMenu(order, menuItems);
-          Object.entries(soldByMenu).forEach(([menuItemId, kg]) => addSoldKg(menuItemId, kg));
+          useOrderStore.getState().deductRecipesForOrder(order);
         } else {
           startAlarm();
           requestAnimationFrame(() => document.querySelector('[data-app-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' }));
@@ -286,9 +295,7 @@ export default function App() {
       onUpdate: (order, oldOrder) => {
         upsertOrder(order);
         if (order.status === 'completed' && oldOrder?.status !== 'completed') {
-          const { menuItems } = useInventoryStore.getState();
-          const soldByMenu = orderPortionKgByMenu(order, menuItems);
-          Object.entries(soldByMenu).forEach(([menuItemId, kg]) => addSoldKg(menuItemId, kg));
+          useOrderStore.getState().deductRecipesForOrder(order);
         }
       }
     });

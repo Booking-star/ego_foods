@@ -14,9 +14,15 @@ const initialInventory = (!rawSaved || !rawSaved.menuItems || rawSaved.menuItems
       ingredients: sampleIngredients,
       recipes: sampleRecipes,
       externalMappings: sampleExternalMappings,
-      batchLogs: sampleBatchLogs
+      batchLogs: sampleBatchLogs,
+      menuItemComponents: [],
+      recipeComponents: []
     }
-  : rawSaved;
+  : {
+      ...rawSaved,
+      menuItemComponents: rawSaved.menuItemComponents || [],
+      recipeComponents: rawSaved.recipeComponents || []
+    };
 
 function persistInventory(state) {
   writeLocal(inventoryKey, {
@@ -25,7 +31,9 @@ function persistInventory(state) {
     ingredients: state.ingredients,
     recipes: state.recipes,
     externalMappings: state.externalMappings,
-    batchLogs: state.batchLogs
+    batchLogs: state.batchLogs,
+    menuItemComponents: state.menuItemComponents || [],
+    recipeComponents: state.recipeComponents || []
   });
 }
 
@@ -36,70 +44,32 @@ const getUnitBaseFactor = (unit) => {
   return 1;
 };
 
-async function calculateIngredientsDeduction(supabase, menuItemId, kgQuantity) {
-  const { data: portions } = await supabase.from('portions').select('*').eq('menu_item_id', menuItemId);
-  if (!portions || portions.length === 0) return {};
-  
-  const portion = portions.find(p => p.is_default) || portions[0];
-  const portionGrams = Number(portion.grams || 400);
-  
-  const { data: menuComps } = await supabase.from('menu_item_components').select('*').eq('portion_id', portion.id);
-  const { data: recipeComps } = await supabase.from('recipe_components').select('*');
-  const { data: recipes } = await supabase.from('recipes').select('*');
-  const { data: dbIngredients } = await supabase.from('ingredients').select('*');
-  
-  const totalGramsCooked = Number(kgQuantity) * 1000;
-  const portionsCount = totalGramsCooked / portionGrams;
-  
-  const baseDeductions = {};
-  
-  const resolveRecipeIngredients = (recipeId, fraction) => {
-    const comps = recipeComps?.filter(rc => rc.recipe_id === recipeId) || [];
-    for (const rc of comps) {
-      if (rc.component_type === 'ingredient' && rc.ingredient_id) {
-        const qty = Number(rc.quantity_in_base_unit || rc.quantity) * fraction;
-        baseDeductions[rc.ingredient_id] = (baseDeductions[rc.ingredient_id] || 0) + qty;
-      } else if (rc.component_type === 'recipe' && rc.child_recipe_id) {
-        const childRecipe = recipes?.find(r => r.id === rc.child_recipe_id);
-        if (childRecipe) {
-          const childOutputBase = Number(childRecipe.output_quantity_in_base_unit || 1000);
-          const childQtyUsed = Number(rc.quantity_in_base_unit || rc.quantity);
-          const childFraction = (childQtyUsed * fraction) / childOutputBase;
-          resolveRecipeIngredients(rc.child_recipe_id, childFraction);
-        }
-      }
-    }
-  };
+// Calculate ingredients deduction for a cooked recipe batch
+function getRecipeIngredientsDeduction(recipeId, kgCooked, recipes, recipeComponents, ingredients) {
+  const recipe = recipes.find(r => r.id === recipeId);
+  if (!recipe) return {};
 
-  for (const comp of (menuComps || [])) {
-    if (comp.component_type === 'ingredient' || comp.component_type === 'packaging') {
-      const ingId = comp.ingredient_id;
-      if (ingId) {
-        const qty = Number(comp.quantity_in_base_unit || comp.quantity) * portionsCount;
-        baseDeductions[ingId] = (baseDeductions[ingId] || 0) + qty;
-      }
-    } else if (comp.component_type === 'recipe') {
-      const recipeId = comp.recipe_id;
-      const recipe = recipes?.find(r => r.id === recipeId);
-      if (recipe) {
-        const recipeOutputBase = Number(recipe.output_quantity_in_base_unit || 1000);
-        const recipeQtyUsedPerPortion = Number(comp.quantity_in_base_unit || comp.quantity);
-        const recipeGramsCooked = recipeQtyUsedPerPortion * portionsCount;
-        const recipeFraction = recipeGramsCooked / recipeOutputBase;
-        resolveRecipeIngredients(recipeId, recipeFraction);
-      }
+  const recipeOutputBase = Number(recipe.output_quantity_in_base_unit || 1000);
+  const cookedBase = Number(kgCooked) * 1000;
+  const fraction = cookedBase / recipeOutputBase;
+
+  const baseDeductions = {};
+  const comps = recipeComponents.filter(rc => rc.recipe_id === recipeId);
+  for (const rc of comps) {
+    if (rc.component_type === 'ingredient' && rc.ingredient_id) {
+      const qty = Number(rc.quantity_in_base_unit || rc.quantity || 0) * fraction;
+      baseDeductions[rc.ingredient_id] = (baseDeductions[rc.ingredient_id] || 0) + qty;
     }
   }
 
   const finalDeductions = {};
   for (const [ingId, qtyBase] of Object.entries(baseDeductions)) {
-    const ing = dbIngredients?.find(i => i.id === ingId);
+    const ing = ingredients.find(i => i.id === ingId);
     if (ing) {
       const factor = getUnitBaseFactor(ing.unit);
       finalDeductions[ingId] = qtyBase / factor;
     }
   }
-  
   return finalDeductions;
 }
 
@@ -110,6 +80,8 @@ export const useInventoryStore = create((set, get) => ({
   recipes: initialInventory.recipes,
   externalMappings: initialInventory.externalMappings,
   batchLogs: initialInventory.batchLogs,
+  menuItemComponents: initialInventory.menuItemComponents,
+  recipeComponents: initialInventory.recipeComponents,
   setAll: (payload) => {
     set((state) => {
       const nextPortions = payload.portions?.length ? payload.portions : state.portions;
@@ -120,22 +92,20 @@ export const useInventoryStore = create((set, get) => ({
         recipes: payload.recipes || state.recipes,
         batchLogs: payload.batchLogs || state.batchLogs,
         portions: nextPortions,
-        externalMappings: nextMappings
+        externalMappings: nextMappings,
+        menuItemComponents: payload.menuItemComponents || state.menuItemComponents,
+        recipeComponents: payload.recipeComponents || state.recipeComponents
       };
       persistInventory(nextState);
       return nextState;
     });
   },
-  logBatch: async (menuItemId, kgCooked) => {
-    let deductionsMap = {};
-    const ingredients = get().ingredients;
-    if (supabase) {
-      deductionsMap = await calculateIngredientsDeduction(supabase, menuItemId, kgCooked);
-    }
+  logBatch: async (recipeId, kgCooked) => {
+    const { recipes, recipeComponents, ingredients } = get();
+    const deductionsMap = getRecipeIngredientsDeduction(recipeId, kgCooked, recipes, recipeComponents, ingredients);
     
     let shortageIngredient = null;
     let shortageAmount = 0;
-    
     for (const [ingId, amount] of Object.entries(deductionsMap)) {
       const ingredient = ingredients.find(i => i.id === ingId);
       if (!ingredient || Number(ingredient.current_stock) - amount < 0) {
@@ -154,7 +124,7 @@ export const useInventoryStore = create((set, get) => ({
 
     const batch = {
       id: crypto.randomUUID?.() || uid('batch'),
-      menu_item_id: menuItemId,
+      recipe_id: recipeId,
       date: todayISO(),
       kg_cooked: Number(kgCooked),
       kg_sold: 0,
@@ -165,6 +135,7 @@ export const useInventoryStore = create((set, get) => ({
     if (supabase) {
       const { error: batchError } = await supabase.from('batch_logs').insert(batch);
       if (batchError) return { ok: false, message: batchError.message };
+      
       for (const [ingId, amount] of Object.entries(deductionsMap)) {
         const ingredient = ingredients.find(i => i.id === ingId);
         const nextStock = Number(ingredient.current_stock) - amount;
@@ -173,6 +144,16 @@ export const useInventoryStore = create((set, get) => ({
           .update({ current_stock: nextStock })
           .eq('id', ingId);
         if (error) return { ok: false, message: error.message };
+      }
+
+      const recipe = recipes.find(r => r.id === recipeId);
+      if (recipe) {
+        const nextRecipeStock = Number(recipe.current_stock || 0) + Number(kgCooked);
+        const { error: recipeError } = await supabase
+          .from('recipes')
+          .update({ current_stock: nextRecipeStock })
+          .eq('id', recipeId);
+        if (recipeError) return { ok: false, message: recipeError.message };
       }
     }
 
@@ -183,10 +164,13 @@ export const useInventoryStore = create((set, get) => ({
         ingredients: state.ingredients.map((ingredient) => {
           const deductionAmount = deductionsMap[ingredient.id];
           return deductionAmount ? { ...ingredient, current_stock: Number(ingredient.current_stock) - deductionAmount } : ingredient;
+        }),
+        recipes: state.recipes.map((recipe) => {
+          return recipe.id === recipeId ? { ...recipe, current_stock: Number(recipe.current_stock || 0) + Number(kgCooked) } : recipe;
         })
       };
       persistInventory(next);
-      return { batchLogs: next.batchLogs, ingredients: next.ingredients };
+      return { batchLogs: next.batchLogs, ingredients: next.ingredients, recipes: next.recipes };
     });
     return { ok: true };
   },
@@ -222,38 +206,11 @@ export const useInventoryStore = create((set, get) => ({
     });
     return { ok: true };
   },
+
   addSoldKg: async (menuItemId, kg) => {
-    const today = todayISO();
-    const todayBatch = get().batchLogs.find((batch) => batch.menu_item_id === menuItemId && batch.date === today);
-    const nextSold = todayBatch ? Number(todayBatch.kg_sold || 0) + Number(kg || 0) : Number(kg || 0);
-    
-    let deductionsMap = {};
-    if (supabase) {
-      if (todayBatch) {
-        await supabase.from('batch_logs').update({ kg_sold: nextSold }).eq('id', todayBatch.id);
-      }
-      deductionsMap = await calculateIngredientsDeduction(supabase, menuItemId, kg);
-      for (const [ingId, amount] of Object.entries(deductionsMap)) {
-        const ingredient = get().ingredients.find(i => i.id === ingId);
-        if (ingredient) {
-          const nextStock = Number(ingredient.current_stock) - amount;
-          await supabase.from('ingredients').update({ current_stock: nextStock }).eq('id', ingId);
-        }
-      }
-    }
-    
-    set((state) => {
-      const batchLogs = todayBatch 
-        ? state.batchLogs.map((batch) => (batch.id === todayBatch.id ? { ...batch, kg_sold: nextSold } : batch))
-        : state.batchLogs;
-      const ingredients = state.ingredients.map((ingredient) => {
-        const deductionAmount = deductionsMap[ingredient.id];
-        return deductionAmount ? { ...ingredient, current_stock: Number(ingredient.current_stock) - deductionAmount } : ingredient;
-      });
-      persistInventory({ ...state, batchLogs, ingredients });
-      return { batchLogs, ingredients };
-    });
+    return { ok: true };
   },
+
   addIngredient: async (input) => {
     let restaurantId = null;
     if (supabase) {

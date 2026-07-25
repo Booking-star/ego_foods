@@ -64,32 +64,16 @@ export default function Inventory() {
     setShowLowStockPopup(false);
   };
 
-  // Sort menu items by Veg, Non-Veg, then Desserts
-  const sortedMenuItems = useMemo(() => {
-    const categoryOrder = {
-      'veg': 1,
-      'nonveg': 2,
-      'non-veg': 2,
-      'desserts': 3,
-      'dessert': 3
-    };
+  // Sort recipes alphabetically
+  const recipes = useInventoryStore((state) => state.recipes);
+  const sortedRecipes = useMemo(() => {
+    return [...recipes].sort((a, b) => a.name.localeCompare(b.name));
+  }, [recipes]);
 
-    return [...menuItems].sort((a, b) => {
-      const catA = String(a.category || '').toLowerCase().replace(/[^a-z]/g, '');
-      const catB = String(b.category || '').toLowerCase().replace(/[^a-z]/g, '');
-      
-      const orderA = categoryOrder[catA] || 99;
-      const orderB = categoryOrder[catB] || 99;
-      
-      if (orderA !== orderB) return orderA - orderB;
-      return a.name.localeCompare(b.name);
-    });
-  }, [menuItems]);
-
-  function handleInputChange(itemId, value) {
+  function handleInputChange(recipeId, value) {
     setBatchInputs((prev) => ({
       ...prev,
-      [itemId]: value
+      [recipeId]: value
     }));
   }
 
@@ -102,21 +86,21 @@ export default function Inventory() {
       let savedAny = false;
       let errorOccurred = null;
 
-      for (const [itemId, valueStr] of Object.entries(batchInputs)) {
-        const item = menuItems.find((m) => m.id === itemId);
-        if (!item) continue;
+      for (const [recipeId, valueStr] of Object.entries(batchInputs)) {
+        const recipe = recipes.find((r) => r.id === recipeId);
+        if (!recipe) continue;
 
         const newVal = Number(valueStr || 0);
-        const todayBatches = batchLogs.filter((batch) => batch.date === todayISO() && batch.menu_item_id === item.id);
+        const todayBatches = batchLogs.filter((batch) => batch.date === todayISO() && batch.recipe_id === recipe.id);
         const currentCooked = todayBatches.reduce((sum, batch) => sum + Number(batch.kg_cooked || 0), 0);
 
         if (newVal > currentCooked) {
           const delta = newVal - currentCooked;
-          const result = await logBatch(item.id, delta);
+          const result = await logBatch(recipe.id, delta);
           if (result.ok) {
             savedAny = true;
           } else {
-            errorOccurred = `Failed to save "${item.name}": ${result.message}`;
+            errorOccurred = `Failed to save "${recipe.name}": ${result.message}`;
             break;
           }
         }
@@ -233,27 +217,29 @@ export default function Inventory() {
           )}
         </div>
 
-        {sortedMenuItems.length === 0 ? (
-          <EmptyState>No menu items configured.</EmptyState>
+        {sortedRecipes.length === 0 ? (
+          <EmptyState>No reusable recipes configured.</EmptyState>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-[#eadfd7] text-[13px] font-black text-text-muted uppercase">
-                  <th className="py-2">Item Name</th>
+                  <th className="py-2">Recipe Name</th>
                   <th className="py-2 text-right w-40">Cooked Today</th>
+                  <th className="py-2 text-right w-40">Available Stock</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedMenuItems.map((item) => {
-                  const todayBatches = batchLogs.filter((batch) => batch.date === todayISO() && batch.menu_item_id === item.id);
+                {sortedRecipes.map((recipe) => {
+                  const todayBatches = batchLogs.filter((batch) => batch.date === todayISO() && batch.recipe_id === recipe.id);
                   const cooked = todayBatches.reduce((sum, batch) => sum + Number(batch.kg_cooked || 0), 0);
+                  const available = Number(recipe.current_stock || 0);
                   
-                  const inputValue = batchInputs[item.id] !== undefined ? batchInputs[item.id] : (cooked || '');
+                  const inputValue = batchInputs[recipe.id] !== undefined ? batchInputs[recipe.id] : (cooked || '');
 
                   return (
-                    <tr key={item.id} className="border-b border-[#f7f1ec] text-[15px] font-semibold text-text-dark">
-                      <td className="py-3 pr-2 font-bold">{item.name}</td>
+                    <tr key={recipe.id} className="border-b border-[#f7f1ec] text-[15px] font-semibold text-text-dark">
+                      <td className="py-3 pr-2 font-bold capitalize">{recipe.name}</td>
                       <td className="py-3 text-right">
                         {isEditing ? (
                           <input
@@ -261,7 +247,7 @@ export default function Inventory() {
                             min="0"
                             step="0.1"
                             value={inputValue}
-                            onChange={(e) => handleInputChange(item.id, e.target.value)}
+                            onChange={(e) => handleInputChange(recipe.id, e.target.value)}
                             placeholder="0.0"
                             className="h-10 w-32 rounded border border-[#eadfd7] bg-white text-right px-2 font-bold outline-primary"
                           />
@@ -270,6 +256,9 @@ export default function Inventory() {
                             {cooked > 0 ? `${cooked.toFixed(1)} kg` : '—'}
                           </span>
                         )}
+                      </td>
+                      <td className="py-3 text-right font-black text-[#8a3a08]">
+                        {available > 0 ? `${available.toFixed(2)} kg` : '0.00 kg'}
                       </td>
                     </tr>
                   );

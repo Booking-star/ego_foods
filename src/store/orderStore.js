@@ -111,6 +111,60 @@ export const useOrderStore = create((set, get) => ({
     if (status === 'preparing') printOrderCopies(next);
     return { ok: true, previous, next };
   },
+  deductRecipesForOrder: async (order) => {
+    if (order.stock_deducted || order.status !== 'completed') return;
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('orders')
+        .update({ stock_deducted: true })
+        .eq('id', order.id)
+        .eq('stock_deducted', false)
+        .select('*');
+      if (error || !data || data.length === 0) {
+        return;
+      }
+    }
+
+    const { portions, menuItemComponents, recipes } = useInventoryStore.getState();
+    const recipeDeductions = {};
+
+    const items = Array.isArray(order.items) ? order.items : [];
+    for (const item of items) {
+      const portionId = item.portion_id || item.id;
+      const portion = portions.find(p => p.id === portionId);
+      if (!portion) continue;
+
+      const components = menuItemComponents.filter(c => c.portion_id === portion.id);
+      for (const comp of components) {
+        if (comp.component_type === 'recipe' && comp.recipe_id) {
+          const qtyUsed = Number(comp.quantity_in_base_unit || comp.quantity || 0); // in grams
+          const kgUsed = (qtyUsed / 1000) * Number(item.quantity || item.qty || 1);
+          recipeDeductions[comp.recipe_id] = (recipeDeductions[comp.recipe_id] || 0) + kgUsed;
+        }
+      }
+    }
+
+    if (supabase) {
+      for (const [recipeId, kg] of Object.entries(recipeDeductions)) {
+        const recipe = recipes.find(r => r.id === recipeId);
+        if (recipe) {
+          const nextStock = Number(recipe.current_stock || 0) - kg;
+          await supabase
+            .from('recipes')
+            .update({ current_stock: nextStock })
+            .eq('id', recipeId);
+        }
+      }
+    }
+
+    useInventoryStore.setState((state) => ({
+      recipes: state.recipes.map(r => {
+        const consumed = recipeDeductions[r.id];
+        return consumed ? { ...r, current_stock: Number(r.current_stock || 0) - consumed } : r;
+      })
+    }));
+  },
   activeCount: () => get().orders.filter(activeToday).length,
   paidTodayTotal: () =>
     get().orders
