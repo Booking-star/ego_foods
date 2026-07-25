@@ -102,9 +102,29 @@ export default function CounterSales() {
       setCart([]);
     }
   }, [selectedTable, activeOrders]);
+  // Group portions into menu item cards
+  const menuCards = useMemo(() => {
+    const groups = {};
+    portions.forEach((p) => {
+      if (p.source === 'swiggy' || !Number(p.price)) return;
+      const menuItem = menuItems.find((item) => item.id === p.menu_item_id);
+      if (!menuItem) return;
+      
+      if (!groups[p.menu_item_id]) {
+        groups[p.menu_item_id] = {
+          menuItemId: p.menu_item_id,
+          menuName: menuItem.name,
+          category: menuItem.category || 'Veg',
+          isAvailable: menuItem.available !== false,
+          portions: []
+        };
+      }
+      groups[p.menu_item_id].portions.push({
+        ...p,
+        isAvailable: menuItem.available !== false
+      });
+    });
 
-  // Available portions for counter menu selection (keeps out-of-stock items visible but flagged)
-  const saleItems = useMemo(() => {
     const categoryOrder = {
       'veg': 1,
       'nonveg': 2,
@@ -113,60 +133,28 @@ export default function CounterSales() {
       'dessert': 3
     };
 
-    return portions
-      .filter((p) => {
-        if (p.source === 'swiggy' || !Number(p.price)) return false;
-        return true;
-      })
-      .map((p) => {
-        const menuItem = menuItems.find((item) => item.id === p.menu_item_id);
-        return {
-          ...p,
-          menuName: menuItem?.name || 'Menu item',
-          category: menuItem?.category || 'Veg',
-          isAvailable: menuItem?.available !== false
-        };
+    return Object.values(groups)
+      .map((card) => {
+        // Sort portions in each card (Regular first, then Large)
+        card.portions.sort((a, b) => {
+          const nameA = String(a.name).toLowerCase();
+          const nameB = String(b.name).toLowerCase();
+          const isLargeA = nameA.includes('large');
+          const isLargeB = nameB.includes('large');
+          if (isLargeA !== isLargeB) return isLargeA ? 1 : -1;
+          return nameA.localeCompare(nameB);
+        });
+        return card;
       })
       .sort((a, b) => {
-        // 1. Sort by category (Veg first, then Non-Veg, then Desserts)
         const catA = String(a.category).toLowerCase().replace(/[^a-z]/g, '');
         const catB = String(b.category).toLowerCase().replace(/[^a-z]/g, '');
-        
         const orderA = categoryOrder[catA] || 99;
         const orderB = categoryOrder[catB] || 99;
-        
-        if (orderA !== orderB) {
-          return orderA - orderB;
-        }
-
-        // 2. Sort by base name (without the (Regular) or (Large) suffix)
-        const cleanName = (str) => {
-          return str
-            .replace(/🟢|🔴/g, '') // remove circles
-            .replace(/\(regular\)|\(large\)/gi, '') // remove suffixes
-            .trim()
-            .toLowerCase();
-        };
-
-        const baseA = cleanName(a.menuName);
-        const baseB = cleanName(b.menuName);
-        
-        if (baseA !== baseB) {
-          return baseA.localeCompare(baseB);
-        }
-
-        // 3. Sort by Regular vs Large (Regular first)
-        const isLargeA = a.menuName.toLowerCase().includes('large');
-        const isLargeB = b.menuName.toLowerCase().includes('large');
-        
-        if (isLargeA !== isLargeB) {
-          return isLargeA ? 1 : -1; // Large comes after Regular
-        }
-        
-        return 0;
+        if (orderA !== orderB) return orderA - orderB;
+        return a.menuName.localeCompare(b.menuName);
       });
   }, [portions, menuItems]);
-
   // Calculate cart total
   const total = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -604,54 +592,65 @@ export default function CounterSales() {
         {/* Menu Items Grid */}
         <h2 className="mb-3 text-lg font-black text-text-dark">Counter Menu Items</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {saleItems.map((item) => (
-            <div key={item.id} className={`rounded-xl border bg-white/70 backdrop-blur-md p-4 shadow-sm relative transition-all hover:scale-[1.01] hover:shadow-md ${
-              item.isAvailable ? 'border-[#eadfd7]/60' : 'border-red-200 bg-red-50/20 opacity-90'
+          {menuCards.map((card) => (
+            <div key={card.menuItemId} className={`rounded-xl border bg-white/70 backdrop-blur-md p-4 shadow-sm relative transition-all hover:shadow-md ${
+              card.isAvailable ? 'border-[#eadfd7]/60' : 'border-red-200 bg-red-50/20 opacity-90'
             }`}>
-              {!item.isAvailable && (
+              {!card.isAvailable && (
                 <span className="absolute top-2 right-2 px-1.5 py-0.5 text-[9px] font-black uppercase rounded bg-red-100 text-red-700 tracking-wider">
                   Out of Stock
                 </span>
               )}
-              <p className="text-[15px] font-black text-text-dark">{item.menuName}</p>
-              <p className="mt-1 text-[13px] font-bold text-text-muted">{item.name} - {item.grams}g</p>
-              <div className="mt-3 flex items-center justify-between">
-                <span className="text-lg font-black text-[#8a3a08]">{formatINR(item.price)}</span>
-                {(() => {
-                  const cartItem = cart.find((c) => c.portion_id === item.id);
+              <p className="text-[15px] font-black text-text-dark">{card.menuName}</p>
+              
+              {/* Portions list inside card */}
+              <div className="mt-3 space-y-3">
+                {card.portions.map((portion) => {
+                  const cartItem = cart.find((c) => c.portion_id === portion.id);
                   const qty = cartItem ? cartItem.quantity : 0;
                   return (
-                    <div className="flex items-center border border-primary rounded overflow-hidden h-7">
-                      <button
-                        type="button"
-                        onClick={() => qty > 0 && adjustQty(item.id, -1)}
-                        disabled={qty === 0}
-                        className={`px-2.5 h-full text-xs font-black transition-all ${
-                          qty > 0 ? 'bg-primary text-white hover:bg-opacity-90' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        }`}
-                      >
-                        -
-                      </button>
-                      <span className="w-8 text-center text-xs font-black text-text-dark">{qty}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!item.isAvailable) {
-                            alert(`${item.menuName} is currently marked Out of Stock. You can add it, but must remove or confirm it before final payment.`);
-                          }
-                          if (qty === 0) {
-                            addToCart(item);
-                          } else {
-                            adjustQty(item.id, 1);
-                          }
-                        }}
-                        className="bg-primary text-white px-2.5 h-full text-xs font-black hover:bg-opacity-90"
-                      >
-                        +
-                      </button>
+                    <div key={portion.id} className="flex items-center justify-between border-t border-[#f7f1ec] pt-2 first:border-t-0 first:pt-0">
+                      <div className="min-w-0 pr-2">
+                        <p className="text-[13px] font-bold text-text-muted capitalize">{portion.name}</p>
+                        <span className="text-[14px] font-black text-[#8a3a08] block mt-0.5">{formatINR(portion.price)}</span>
+                      </div>
+                      
+                      <div className="flex items-center border border-primary rounded overflow-hidden h-7 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => qty > 0 && adjustQty(portion.id, -1)}
+                          disabled={qty === 0}
+                          className={`px-2.5 h-full text-xs font-black transition-all ${
+                            qty > 0 ? 'bg-primary text-white hover:bg-opacity-90' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          }`}
+                        >
+                          -
+                        </button>
+                        <span className="w-8 text-center text-xs font-black text-text-dark">{qty}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!card.isAvailable) {
+                              alert(`${card.menuName} is currently marked Out of Stock. You can add it, but must remove or confirm it before final payment.`);
+                            }
+                            const portionWithMenuName = {
+                              ...portion,
+                              menuName: card.menuName
+                            };
+                            if (qty === 0) {
+                              addToCart(portionWithMenuName);
+                            } else {
+                              adjustQty(portion.id, 1);
+                            }
+                          }}
+                          className="bg-primary text-white px-2.5 h-full text-xs font-black hover:bg-opacity-90"
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
                   );
-                })()}
+                })}
               </div>
             </div>
           ))}
