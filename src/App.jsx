@@ -14,7 +14,8 @@ import {
   Store,
   UtensilsCrossed,
   Wifi,
-  ChefHat
+  ChefHat,
+  Pin
 } from 'lucide-react';
 import { startAlarm, unlockAudio } from './lib/audio';
 import { applyExternalMappingsToOrders, orderPortionKgByMenu } from './lib/business';
@@ -93,6 +94,17 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(() => {
     return localStorage.getItem('kitchen-os.user-role') || null;
   });
+  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
+  const [isSidebarPinned, setIsSidebarPinned] = useState(() => {
+    return localStorage.getItem('kitchen-os.sidebar-pinned') === 'true';
+  });
+  const toggleSidebarPinned = () => {
+    setIsSidebarPinned((prev) => {
+      const next = !prev;
+      localStorage.setItem('kitchen-os.sidebar-pinned', String(next));
+      return next;
+    });
+  };
 
   useEffect(() => {
     window.addEventListener('click', unlockAudio, { once: true });
@@ -412,75 +424,108 @@ export default function App() {
 
   return (
     <div className="flex h-screen min-h-[680px] w-screen overflow-hidden bg-gradient-to-br from-[#fdfcfb] via-[#f5ede6] to-[#eeddd0] text-text-dark" data-app-scroll>
-      <aside className="flex w-[164px] shrink-0 flex-col border-r border-[#eadfd7] bg-white/70 backdrop-blur-md text-[#4b2b19] scrollbar-none max-[860px]:w-[82px]">
-        <button
-          type="button"
-          onClick={() => setTab('orders')}
-          className="flex h-[74px] shrink-0 items-center gap-3 border-b border-[#eadfd7] px-4 text-left max-[860px]:justify-center max-[860px]:px-2"
-          aria-label="Kitchen OS home"
-        >
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#eadfd7] bg-white shadow-card">
-            <img src="ego-foods-logo.jpg" alt="Ego Foods logo" className="h-full w-full object-cover" />
-          </span>
-          <span className="text-[14px] font-black leading-4 max-[860px]:hidden">EGO FOODS</span>
-        </button>
-        <nav className="flex w-full flex-1 flex-col gap-1 px-2 py-4 overflow-y-auto scrollbar-none">
-          {navItems
-            .filter((item) => item.roles.includes(currentUser) && (item.id === 'settings' || !hiddenTabs.includes(item.id)))
-            .map(({ id, label, icon: Icon }) => {
-              const active = tab === id;
-              return (
-                <button
-                  key={id}
-                type="button"
-                onClick={() => setTab(id)}
-                aria-label={label}
-                className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-extrabold transition-all duration-200 ${
-                  active ? 'bg-primary text-white shadow-lg shadow-primary/30 scale-[1.02]' : 'text-[#5a4b42] hover:bg-[#fff4eb] hover:translate-x-0.5'
-                }`}
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-                  <Icon size={17} />
-                </span>
-                <span className="max-[860px]:hidden">{label}</span>
-                 {id === 'orders' && activeCount > 0 ? (
-                   <span className={`absolute right-2.5 top-3 flex min-w-5 h-5 items-center justify-center rounded-full text-[10px] font-black px-1 border transition-all ${
-                     active ? 'bg-white text-[#9a3f00] border-white' : 'bg-danger text-white border-transparent'
-                   }`}>
-                     {activeCount}
-                   </span>
-                 ) : null}
-              </button>
-            );
-          })}
-        </nav>
-        {/* User profile / Logout */}
-        {!isElectron && (
-          <div className="mt-auto border-t border-[#eadfd7] p-2 text-center max-[860px]:p-1">
-            <p className="text-[11px] font-black uppercase text-text-muted max-[860px]:hidden">
-              {currentUser === 'owner' ? 'Owner' : 'Waiter'}
-            </p>
+      {/* Edge trigger zone for auto-hide hover reveal */}
+      {!isSidebarPinned && (
+        <div
+          className="fixed left-0 top-0 bottom-0 w-3 z-40 bg-transparent cursor-w-resize"
+          onMouseEnter={() => setIsSidebarVisible(true)}
+        />
+      )}
+
+      <aside
+        className={`flex h-full flex-col bg-white/70 backdrop-blur-md text-[#4b2b19] scrollbar-none transition-all duration-300 ease-in-out shrink-0 z-50 overflow-hidden md:relative fixed left-0 top-0 max-md:shadow-2xl ${
+          isSidebarPinned || isSidebarVisible
+            ? 'w-[164px] max-[860px]:w-[82px] border-r border-[#eadfd7]'
+            : 'w-0 border-r-0'
+        }`}
+        onMouseEnter={() => setIsSidebarVisible(true)}
+        onMouseLeave={() => setIsSidebarVisible(false)}
+      >
+        <div className="w-[164px] max-[860px]:w-[82px] flex flex-col h-full shrink-0">
+          <div className="flex h-[74px] shrink-0 items-center justify-between border-b border-[#eadfd7] px-3.5 text-left max-[860px]:justify-center max-[860px]:px-2">
             <button
               type="button"
-              onClick={() => {
-                localStorage.removeItem('kitchen-os.user-role');
-                setCurrentUser(null);
-              }}
-              className="mt-1 text-[11px] font-black text-danger hover:underline uppercase block w-full text-center"
+              onClick={() => setTab('orders')}
+              className="flex items-center gap-2 text-left"
+              aria-label="Kitchen OS home"
             >
-              Logout
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#eadfd7] bg-white shadow-card">
+                <img src="ego-foods-logo.jpg" alt="Ego Foods logo" className="h-full w-full object-cover" />
+              </span>
+              <span className="text-[13px] font-black leading-4 max-[860px]:hidden">EGO FOODS</span>
+            </button>
+            <button
+              type="button"
+              onClick={toggleSidebarPinned}
+              title={isSidebarPinned ? 'Unpin Sidebar (Enable Auto-Hide)' : 'Pin Sidebar (Keep Open)'}
+              className={`flex h-6 w-6 items-center justify-center rounded hover:bg-[#fff4eb] text-text-muted hover:text-primary transition-colors max-[860px]:hidden shrink-0 ${
+                isSidebarPinned ? 'text-primary' : ''
+              }`}
+            >
+              <Pin size={13} className={isSidebarPinned ? 'rotate-45 fill-current' : ''} />
             </button>
           </div>
-        )}
-        <button
-          type="button"
-          onClick={() => setTab('counter')}
-          aria-label="New Counter Sale"
-          className="m-3 min-h-11 rounded-sm bg-primary px-3 text-[12px] font-black text-white max-[860px]:px-2"
-        >
-          <span className="max-[860px]:hidden">NEW COUNTER SALE</span>
-          <span className="hidden max-[860px]:inline">SALE</span>
-        </button>
+
+          <nav className="flex w-full flex-1 flex-col gap-1 px-2 py-4 overflow-y-auto scrollbar-none">
+            {navItems
+              .filter((item) => item.roles.includes(currentUser) && (item.id === 'settings' || !hiddenTabs.includes(item.id)))
+              .map(({ id, label, icon: Icon }) => {
+                const active = tab === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setTab(id)}
+                    aria-label={label}
+                    className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-extrabold transition-all duration-200 ${
+                      active ? 'bg-primary text-white shadow-lg shadow-primary/30 scale-[1.02]' : 'text-[#5a4b42] hover:bg-[#fff4eb] hover:translate-x-0.5'
+                    }`}
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+                      <Icon size={17} />
+                    </span>
+                    <span className="max-[860px]:hidden">{label}</span>
+                    {id === 'orders' && activeCount > 0 ? (
+                      <span className={`absolute right-2.5 top-3 flex min-w-5 h-5 items-center justify-center rounded-full text-[10px] font-black px-1 border transition-all ${
+                        active ? 'bg-white text-[#9a3f00] border-white' : 'bg-danger text-white border-transparent'
+                      }`}>
+                        {activeCount}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+          </nav>
+
+          {/* User profile / Logout */}
+          {!isElectron && (
+            <div className="mt-auto border-t border-[#eadfd7] p-2 text-center max-[860px]:p-1">
+              <p className="text-[11px] font-black uppercase text-text-muted max-[860px]:hidden">
+                {currentUser === 'owner' ? 'Owner' : 'Waiter'}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem('kitchen-os.user-role');
+                  setCurrentUser(null);
+                }}
+                className="mt-1 text-[11px] font-black text-danger hover:underline uppercase block w-full text-center"
+              >
+                Logout
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setTab('counter')}
+            aria-label="New Counter Sale"
+            className="m-3 min-h-11 rounded-sm bg-primary px-3 text-[12px] font-black text-white max-[860px]:px-2 shrink-0"
+          >
+            <span className="max-[860px]:hidden font-black">NEW COUNTER SALE</span>
+            <span className="hidden max-[860px]:inline">SALE</span>
+          </button>
+        </div>
       </aside>
 
       <div className="relative flex min-w-0 flex-1 flex-col">
