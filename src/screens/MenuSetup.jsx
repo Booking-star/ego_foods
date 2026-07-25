@@ -1259,8 +1259,8 @@ export default function MenuSetup() {
                   <label className="text-xs font-black text-text-muted uppercase">Purchase Qty</label>
                   <input
                     type="number"
-                    value={activeIngredient.purchase_quantity || 1}
-                    onChange={(e) => setActiveIngredient({ ...activeIngredient, purchase_quantity: Number(e.target.value) })}
+                    value={activeIngredient.purchase_quantity !== undefined && activeIngredient.purchase_quantity !== null ? activeIngredient.purchase_quantity : ""}
+                    onChange={(e) => setActiveIngredient({ ...activeIngredient, purchase_quantity: e.target.value })}
                     className="h-9 rounded border border-[#eadfd7] bg-white px-3 text-xs font-bold text-text-dark outline-none"
                   />
                 </div>
@@ -1268,8 +1268,8 @@ export default function MenuSetup() {
                   <label className="text-xs font-black text-text-muted uppercase">Purchase Price (₹)</label>
                   <input
                     type="number"
-                    value={activeIngredient.purchase_price || 0}
-                    onChange={(e) => setActiveIngredient({ ...activeIngredient, purchase_price: Number(e.target.value) })}
+                    value={activeIngredient.purchase_price !== undefined && activeIngredient.purchase_price !== null ? activeIngredient.purchase_price : ""}
+                    onChange={(e) => setActiveIngredient({ ...activeIngredient, purchase_price: e.target.value })}
                     className="h-9 rounded border border-[#eadfd7] bg-white px-3 text-xs font-bold text-text-dark outline-none"
                   />
                 </div>
@@ -1339,8 +1339,8 @@ export default function MenuSetup() {
                   <label className="text-xs font-black text-text-muted uppercase">Yield Qty</label>
                   <input
                     type="number"
-                    value={activeRecipe.output_quantity}
-                    onChange={(e) => setActiveRecipe({ ...activeRecipe, output_quantity: Number(e.target.value) })}
+                    value={activeRecipe.output_quantity !== undefined && activeRecipe.output_quantity !== null ? activeRecipe.output_quantity : ""}
+                    onChange={(e) => setActiveRecipe({ ...activeRecipe, output_quantity: e.target.value })}
                     className="h-9 rounded border border-[#eadfd7] bg-white px-2 text-xs font-bold text-text-dark outline-none"
                   />
                 </div>
@@ -1455,10 +1455,10 @@ export default function MenuSetup() {
 
                       <input
                         type="number"
-                        value={comp.quantity}
+                        value={comp.quantity !== undefined && comp.quantity !== null ? comp.quantity : ""}
                         onChange={(e) => {
                           const nextC = [...activeRecipe.components];
-                          nextC[idx].quantity = Number(e.target.value);
+                          nextC[idx].quantity = e.target.value;
                           setActiveRecipe({ ...activeRecipe, components: nextC });
                         }}
                         className="w-16 h-8 rounded border text-xs text-center"
@@ -1637,8 +1637,8 @@ export default function MenuSetup() {
                   <label className="text-xs font-black text-text-muted uppercase">Manual Preparation Cost (₹)</label>
                   <input
                     type="number"
-                    value={activeMenuComposition.manual_preparation_cost}
-                    onChange={(e) => setActiveMenuComposition({ ...activeMenuComposition, manual_preparation_cost: Number(e.target.value) })}
+                    value={activeMenuComposition.manual_preparation_cost !== undefined && activeMenuComposition.manual_preparation_cost !== null ? activeMenuComposition.manual_preparation_cost : ""}
+                    onChange={(e) => setActiveMenuComposition({ ...activeMenuComposition, manual_preparation_cost: e.target.value })}
                     className="h-8 rounded border px-2 text-xs font-bold text-center"
                   />
                 </div>
@@ -1698,10 +1698,10 @@ export default function MenuSetup() {
                         <input
                           type="number"
                           placeholder="Grams"
-                          value={v.grams}
+                          value={v.grams !== undefined && v.grams !== null ? v.grams : ""}
                           onChange={(e) => {
                             const newVars = [...activeMenuComposition.variants];
-                            newVars[vIdx].grams = Number(e.target.value);
+                            newVars[vIdx].grams = e.target.value;
                             setActiveMenuComposition({ ...activeMenuComposition, variants: newVars });
                           }}
                           className="h-8 w-20 rounded border px-2 text-xs text-center"
@@ -1709,10 +1709,10 @@ export default function MenuSetup() {
                         <input
                           type="number"
                           placeholder="Price"
-                          value={v.price}
+                          value={v.price !== undefined && v.price !== null ? v.price : ""}
                           onChange={(e) => {
                             const newVars = [...activeMenuComposition.variants];
-                            newVars[vIdx].price = Number(e.target.value);
+                            newVars[vIdx].price = e.target.value;
                             setActiveMenuComposition({ ...activeMenuComposition, variants: newVars });
                           }}
                           className="h-8 w-24 rounded border px-2 text-xs font-bold text-center"
@@ -1827,10 +1827,10 @@ export default function MenuSetup() {
 
                                 <input
                                   type="number"
-                                  value={comp.quantity}
+                                  value={comp.quantity !== undefined && comp.quantity !== null ? comp.quantity : ""}
                                   onChange={(e) => {
                                     const newVars = [...activeMenuComposition.variants];
-                                    newVars[vIdx].components[cIdx].quantity = Number(e.target.value);
+                                    newVars[vIdx].components[cIdx].quantity = e.target.value;
                                     setActiveMenuComposition({ ...activeMenuComposition, variants: newVars });
                                   }}
                                   className="w-16 h-8 rounded border text-xs text-center"
@@ -1966,8 +1966,8 @@ export default function MenuSetup() {
                 <label className="text-xs font-black text-text-muted uppercase">Display Order</label>
                 <input
                   type="number"
-                  value={activeCategory.display_order}
-                  onChange={(e) => setActiveCategory({ ...activeCategory, display_order: Number(e.target.value) })}
+                  value={activeCategory.display_order !== undefined && activeCategory.display_order !== null ? activeCategory.display_order : ""}
+                  onChange={(e) => setActiveCategory({ ...activeCategory, display_order: e.target.value })}
                   className="h-9 rounded border border-[#eadfd7] bg-white px-3 text-xs font-bold text-text-dark outline-none"
                 />
               </div>

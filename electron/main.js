@@ -119,7 +119,7 @@ function customerReceiptHtml(order) {
     return `<tr><td class="item">${escapeHtml(item.name)} ${escapeHtml(item.variant || '')}<br/>x ${qty}</td><td class="amount">${money(price * qty)}</td></tr>`;
   }).join('');
   
-  const isOnline = order.source !== 'counter';
+  const isWhatsapp = order.source === 'whatsapp';
 
   return `<!doctype html><html><head><meta charset="utf-8"/><style>
     ${receiptCss(11)}
@@ -132,7 +132,7 @@ function customerReceiptHtml(order) {
     <div class="line"></div>
     <table>${items}</table>
     <div class="total">Total: ${money(order.total_amount || order.total || 0)}</div>
-    ${isOnline ? `
+    ${isWhatsapp && (order.pickup_otp || order.pickup_code) ? `
       <div class="bold">Pickup OTP</div><div class="otp">${escapeHtml(order.pickup_otp || order.pickup_code || '')}</div>
       <div class="center">Share this OTP with the pickup person.</div>
     ` : ''}
@@ -165,7 +165,7 @@ function kitchenReceiptHtml(order) {
   }
 
   const typeLabel = order.customer_name || (order.table_number === "Takeaway" ? "Takeaway" : (order.table_number ? `Table ${order.table_number}` : 'Takeaway'));
-  const isOnline = order.source !== 'counter';
+  const isWhatsapp = order.source === 'whatsapp';
 
   return `<!doctype html><html><head><meta charset="utf-8"/><style>
     ${receiptCss(12)}
@@ -179,7 +179,7 @@ function kitchenReceiptHtml(order) {
     `}
     <div style="font-size: 16px; font-weight: bold; margin-bottom: 2mm; text-align: center; border: 2px solid #000; padding: 1.5mm; text-transform: uppercase;">${escapeHtml(typeLabel)}</div>
     <div>Order: ${escapeHtml(order.pickup_otp || order.pickup_code || order.order_code || order.id || '')}</div>
-    ${isOnline ? `
+    ${isWhatsapp && (order.pickup_otp || order.pickup_code) ? `
       <div class="bold">Pickup OTP</div><div class="otp">${escapeHtml(order.pickup_otp || order.pickup_code || '')}</div>
     ` : ''}
     <div class="line"></div>
