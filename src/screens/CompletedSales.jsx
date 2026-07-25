@@ -108,14 +108,14 @@ export default function CompletedSales() {
           <button
             type="button"
             onClick={() => setViewType('sales')}
-            className="px-4 py-2 text-xs font-black rounded-sm border border-[#eadfd7] bg-white text-text-dark"
+            className="px-4 py-2 text-xs font-black rounded-lg border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md text-text-dark hover:bg-white transition-all"
           >
             Sales Breakdown
           </button>
           <button
             type="button"
             onClick={() => setViewType('cash')}
-            className="px-4 py-2 text-xs font-black rounded-sm bg-primary text-white"
+            className="px-4 py-2 text-xs font-black rounded-lg bg-primary text-white shadow-md shadow-primary/20 hover:scale-[1.02] transition-transform"
           >
             Cash Ledger
           </button>
@@ -134,14 +134,14 @@ export default function CompletedSales() {
         <button
           type="button"
           onClick={() => setViewType('sales')}
-          className="px-4 py-2 text-xs font-black rounded-sm bg-primary text-white"
+          className="px-4 py-2 text-xs font-black rounded-lg bg-primary text-white shadow-md shadow-primary/20 hover:scale-[1.02] transition-transform"
         >
           Sales Breakdown
         </button>
         <button
           type="button"
           onClick={() => setViewType('cash')}
-          className="px-4 py-2 text-xs font-black rounded-sm border border-[#eadfd7] bg-white text-text-dark"
+          className="px-4 py-2 text-xs font-black rounded-lg border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md text-text-dark hover:bg-white transition-all"
         >
           Cash Ledger
         </button>
@@ -161,14 +161,14 @@ export default function CompletedSales() {
 
           <ReportDateFilter />
 
-          <div className="mb-4 grid grid-cols-5 rounded-sm border border-[#eadfd7] bg-white p-1">
+          <div className="mb-4 grid grid-cols-5 rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md p-1 shadow-sm">
             {sourceOptions.map((option) => (
               <button
                 key={option.id}
                 type="button"
                 onClick={() => setSource(option.id)}
-                className={`min-h-11 rounded-md text-[15px] font-black ${
-                  source === option.id ? 'bg-primary text-white' : 'text-text-muted'
+                className={`min-h-11 rounded-lg text-[15px] font-black transition-all ${
+                  source === option.id ? 'bg-primary text-white shadow-md' : 'text-text-muted hover:bg-white/50'
                 }`}
               >
                 {option.label}
@@ -185,8 +185,8 @@ export default function CompletedSales() {
           {!rows.length ? (
             <EmptyState>No completed sales found for this period.</EmptyState>
           ) : (
-            <div className="overflow-x-auto rounded-sm border border-[#eadfd7] bg-white shadow-card">
-              <div className="grid min-w-[720px] grid-cols-[minmax(220px,1fr)_120px_100px_130px_140px] border-b border-[#eadfd7] bg-[#fff6ef] px-4 py-3 text-[13px] font-black uppercase text-text-muted">
+            <div className="overflow-x-auto rounded-xl border border-[#eadfd7]/60 bg-white/75 backdrop-blur-md shadow-card">
+              <div className="grid min-w-[720px] grid-cols-[minmax(220px,1fr)_120px_100px_130px_140px] border-b border-[#eadfd7]/60 bg-[#fff6ef]/60 px-4 py-3.5 text-[13px] font-black uppercase text-text-muted">
                 <span>Item</span>
                 <span>Source</span>
                 <span className="text-right">Qty</span>
@@ -194,7 +194,7 @@ export default function CompletedSales() {
                 <span className="text-right">Sales</span>
               </div>
               {rows.map((row) => (
-                <div key={`${row.source}-${row.item}`} className="grid min-w-[720px] grid-cols-[minmax(220px,1fr)_120px_100px_130px_140px] items-center border-b border-[#eadfd7] px-4 py-4 text-[15px] font-bold text-text-dark last:border-b-0">
+                <div key={`${row.source}-${row.item}`} className="grid min-w-[720px] grid-cols-[minmax(220px,1fr)_120px_100px_130px_140px] items-center border-b border-[#eadfd7]/40 px-4 py-4 text-[15px] font-bold text-text-dark last:border-b-0 hover:bg-white/40 transition-colors">
                   <span className="min-w-0 pr-3">{row.item}</span>
                   <span className={row.source === 'Swiggy' ? 'text-primary' : 'text-success'}>{row.source}</span>
                   <span className="text-right text-lg font-black">{row.quantity}</span>
@@ -212,7 +212,7 @@ export default function CompletedSales() {
 
 function Metric({ label, value }) {
   return (
-    <div className="rounded-sm border border-[#eadfd7] bg-white p-3 shadow-card">
+    <div className="rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md p-4 shadow-sm hover:scale-[1.01] transition-transform duration-200">
       <p className="text-[13px] font-black uppercase text-text-muted">{label}</p>
       <p className="mt-2 text-2xl font-black text-text-dark">{value}</p>
     </div>

@@ -139,9 +139,16 @@ export default function DailySummary() {
 
       <ReportDateFilter />
 
-      <div className="mb-4 grid grid-cols-2 rounded-sm border border-[#eadfd7] bg-white p-1">
+      <div className="mb-4 grid grid-cols-2 rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md p-1 shadow-sm">
         {['today', 'week'].map((item) => (
-          <button key={item} type="button" onClick={() => setMode(item)} className={`rounded-md text-base font-bold ${mode === item ? 'bg-primary text-white' : 'text-text-muted'}`}>
+          <button
+            key={item}
+            type="button"
+            onClick={() => setMode(item)}
+            className={`min-h-11 rounded-lg text-base font-black transition-all ${
+              mode === item ? 'bg-primary text-white shadow-md' : 'text-text-muted hover:bg-white/50'
+            }`}
+          >
             {item === 'today' ? 'Today' : 'This Week'}
           </button>
         ))}
@@ -158,13 +165,13 @@ export default function DailySummary() {
             <SummaryCard title="WASTED TODAY" value={`${formatKg(wasted)}`} detail={`${formatINR(wasteCost)} estimated`} />
           </div>
 
-          <div className="mt-4 rounded-sm border border-[#eadfd7] bg-white p-4 shadow-card">
+          <div className="mt-4 rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md p-4 shadow-md">
             <p className="text-[14px] font-black text-text-muted">NET PROFIT TODAY</p>
             <p className={`mt-2 text-4xl font-black ${profit >= 0 ? 'text-success' : 'text-danger'}`}>{formatINR(profit)}</p>
             <p className="mt-2 text-[15px] font-semibold text-text-muted">Sales {formatINR(sales)} - Expenses {formatINR(expenseTotal)}</p>
           </div>
 
-          <div className="mt-4 rounded-sm border border-[#eadfd7] bg-white p-4 shadow-card">
+          <div className="mt-4 rounded-xl border border-[#eadfd7]/60 bg-white/75 backdrop-blur-md p-4 shadow-card">
             <h2 className="mb-3 text-[14px] font-black text-text-muted">SALES BREAKDOWN</h2>
             <div className="h-44">
               <ResponsiveContainer width="100%" height="100%">
@@ -186,7 +193,7 @@ export default function DailySummary() {
           </div>
 
           {/* Peak Hours Chart */}
-          <div className="mt-4 rounded-sm border border-[#eadfd7] bg-white p-4 shadow-card">
+          <div className="mt-4 rounded-xl border border-[#eadfd7]/60 bg-white/75 backdrop-blur-md p-4 shadow-card">
             <h2 className="mb-3 text-[14px] font-black text-text-muted">PEAK SALES HOURS</h2>
             {peakHourData.length === 0 ? (
               <p className="text-sm font-semibold text-text-muted">No sales hourly distribution available.</p>
@@ -204,14 +211,14 @@ export default function DailySummary() {
           </div>
 
           {/* Menu Item Profitability Analysis */}
-          <div className="mt-4 rounded-sm border border-[#eadfd7] bg-white p-4 shadow-card">
+          <div className="mt-4 rounded-xl border border-[#eadfd7]/60 bg-white/75 backdrop-blur-md p-4 shadow-card">
             <h2 className="mb-3 text-[14px] font-black text-text-muted">MENU MARGIN & VOLUME MATRIX</h2>
             {itemProfitability.length === 0 ? (
               <p className="text-sm font-semibold text-text-muted">No item sales volume logged today.</p>
             ) : (
               <div className="space-y-3">
                 {itemProfitability.slice(0, 5).map((item) => (
-                  <div key={item.id} className="rounded border border-[#f0e4db] bg-[#fffcf9] p-3 text-xs">
+                  <div key={item.id} className="rounded-xl border border-[#f0e4db] bg-[#fffcf9] p-3 text-xs">
                     <div className="flex justify-between items-center font-bold text-text-dark">
                       <span className="text-[13px] font-black">{item.name}</span>
                       <span>{item.qty} portions sold · {formatINR(item.revenue)}</span>
@@ -231,7 +238,7 @@ export default function DailySummary() {
         </>
       ) : (
         <>
-          <div className="rounded-sm border border-[#eadfd7] bg-white p-4 shadow-card">
+          <div className="rounded-xl border border-[#eadfd7]/60 bg-white/75 backdrop-blur-md p-4 shadow-card">
             <h2 className="mb-3 text-[14px] font-black text-text-muted">DAILY NET PROFIT</h2>
             <div className="h-52">
               <ResponsiveContainer width="100%" height="100%">
@@ -243,7 +250,7 @@ export default function DailySummary() {
               </ResponsiveContainer>
             </div>
           </div>
-          <div className="mt-4 rounded-sm border border-[#eadfd7] bg-white p-4 shadow-card">
+          <div className="mt-4 rounded-xl border border-[#eadfd7]/60 bg-white/75 backdrop-blur-md p-4 shadow-card">
             <h2 className="mb-3 text-[14px] font-black text-text-muted">WASTE THIS WEEK</h2>
             {week.map((day) => (
               <div key={day.day} className="flex justify-between py-2 text-base font-semibold text-text-dark">
@@ -251,7 +258,7 @@ export default function DailySummary() {
                 <span>{formatKg(day.waste)} · {formatINR(day.waste * 90)} {day.day === worstWaste.day ? 'Most' : ''}</span>
               </div>
             ))}
-            <p className="mt-3 rounded-sm bg-[#fff6ef] p-3 text-[15px] font-bold text-text-dark">
+            <p className="mt-3 rounded-lg bg-[#fff6ef] p-3 text-[15px] font-bold text-text-dark">
               You wasted the most on {worstWaste.day}. Consider cooking less on {worstWaste.day}s.
             </p>
           </div>
@@ -263,7 +270,7 @@ export default function DailySummary() {
 
 function SummaryCard({ title, value, detail }) {
   return (
-    <div className="rounded-sm border border-[#eadfd7] bg-white p-3 shadow-card">
+    <div className="rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md p-4 shadow-sm hover:scale-[1.01] transition-transform duration-200">
       <p className="text-[14px] font-black text-text-muted">{title}</p>
       <p className="mt-2 min-h-12 text-xl font-black leading-6 text-text-dark">{value}</p>
       <p className="mt-1 text-[14px] font-semibold text-text-muted">{detail}</p>
