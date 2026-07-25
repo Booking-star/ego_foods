@@ -1,5 +1,7 @@
-import { Printer } from 'lucide-react';
+import { Printer, Volume2 } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
+import { useAlertStore } from '../store/alertStore';
+import { alertManager } from '../lib/alertManager';
 import { useEffect, useState } from 'react';
 
 const ALL_TABS = [
@@ -25,11 +27,41 @@ export default function SettingsScreen() {
   const toggleTabVisibility = useAppStore((state) => state.toggleTabVisibility);
   const [printers, setPrinters] = useState([]);
 
+  // Alert settings store
+  const {
+    alertMode,
+    alarmVolume,
+    voiceVolume,
+    mascotEnabled,
+    minimizeNotificationEnabled,
+    repeatIntervalSeconds,
+    setAlertMode,
+    setAlarmVolume,
+    setVoiceVolume,
+    setMascotEnabled,
+    setMinimizeNotificationEnabled,
+    setRepeatIntervalSeconds
+  } = useAlertStore();
+
   useEffect(() => {
     window.kitchenOS?.printer?.list?.()
       .then((rows) => setPrinters(rows || []))
       .catch(() => setPrinters([]));
   }, []);
+
+  const handleTestAlarm = () => {
+    alertManager.playAudio(alertManager.alarmAudio, alarmVolume);
+    setTimeout(() => {
+      if (alertManager.alarmAudio) {
+        alertManager.alarmAudio.pause();
+        alertManager.alarmAudio.currentTime = 0;
+      }
+    }, 3000);
+  };
+
+  const handleTestVoice = () => {
+    alertManager.playAudio(alertManager.voiceSingle, voiceVolume);
+  };
 
   return (
     <section className="h-full overflow-y-auto bg-transparent p-5 scrollbar-none">
@@ -38,7 +70,7 @@ export default function SettingsScreen() {
         <p className="mt-1 text-[13px] font-semibold text-text-muted">Operational settings used by the desktop app.</p>
       </header>
 
-      <div className="max-w-2xl space-y-6">
+      <div className="max-w-2xl space-y-6 pb-20">
         <div className="rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md p-5 shadow-card">
           <div className="flex items-center gap-2 border-b border-[#f7f1ec] pb-3">
             <Printer size={18} className="text-primary" />
@@ -86,6 +118,115 @@ export default function SettingsScreen() {
           </div>
         </div>
 
+        {/* Voice & Alarm Alert Settings */}
+        <div className="rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md p-5 shadow-card">
+          <div className="flex items-center gap-2 border-b border-[#f7f1ec] pb-3">
+            <Volume2 size={18} className="text-primary" />
+            <h2 className="text-base font-black text-text-dark uppercase tracking-wider">Voice & Alarm Alert Settings</h2>
+          </div>
+
+          <div className="mt-4 space-y-4">
+            <label className="block">
+              <span className="text-[11px] font-black uppercase text-text-muted">Order Alert Mode</span>
+              <select
+                value={alertMode}
+                onChange={(e) => setAlertMode(e.target.value)}
+                className="mt-1.5 h-11 w-full rounded border border-[#eadfd7] bg-white px-3 text-xs font-bold text-text-dark"
+              >
+                <option value="alarm_voice">Alarm + Voice (Default)</option>
+                <option value="alarm_only">Alarm Only</option>
+                <option value="voice_only">Voice Only</option>
+                <option value="silent">Silent</option>
+              </select>
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block">
+                  <span className="text-[11px] font-black uppercase text-text-muted">Alarm Volume ({Math.round(alarmVolume * 100)}%)</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={alarmVolume}
+                    onChange={(e) => setAlarmVolume(parseFloat(e.target.value))}
+                    className="mt-2 w-full h-1.5 bg-[#eadfd7] rounded-lg appearance-none cursor-pointer accent-primary"
+                  />
+                </label>
+              </div>
+
+              <div>
+                <label className="block">
+                  <span className="text-[11px] font-black uppercase text-text-muted">Voice Volume ({Math.round(voiceVolume * 100)}%)</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={voiceVolume}
+                    onChange={(e) => setVoiceVolume(parseFloat(e.target.value))}
+                    className="mt-2 w-full h-1.5 bg-[#eadfd7] rounded-lg appearance-none cursor-pointer accent-primary"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              <label className="flex items-center gap-3 cursor-pointer text-sm font-bold text-text-dark select-none">
+                <input
+                  type="checkbox"
+                  checked={mascotEnabled}
+                  onChange={(e) => setMascotEnabled(e.target.checked)}
+                  className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary accent-primary"
+                />
+                <span>Enable Chef Assistant Mascot</span>
+              </label>
+
+              <label className="flex items-center gap-3 cursor-pointer text-sm font-bold text-text-dark select-none">
+                <input
+                  type="checkbox"
+                  checked={minimizeNotificationEnabled}
+                  onChange={(e) => setMinimizeNotificationEnabled(e.target.checked)}
+                  className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary accent-primary"
+                />
+                <span>Play Sound When Minimized</span>
+              </label>
+            </div>
+
+            <div>
+              <label className="block">
+                <span className="text-[11px] font-black uppercase text-text-muted">Alert Repeat Interval (seconds)</span>
+                <input
+                  type="number"
+                  min="3"
+                  max="60"
+                  value={repeatIntervalSeconds}
+                  onChange={(e) => setRepeatIntervalSeconds(parseInt(e.target.value) || 5)}
+                  className="mt-1.5 h-11 w-full rounded border border-[#eadfd7] bg-white px-3 text-xs font-bold text-text-dark outline-none"
+                />
+              </label>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={handleTestAlarm}
+                className="flex-1 inline-flex min-h-10 items-center justify-center gap-2 rounded border border-[#eadfd7] bg-white text-text-dark text-xs font-black uppercase hover:bg-gray-50 active:scale-95 transition-all"
+              >
+                Test Alarm
+              </button>
+              <button
+                type="button"
+                onClick={handleTestVoice}
+                className="flex-1 inline-flex min-h-10 items-center justify-center gap-2 rounded border border-[#eadfd7] bg-white text-text-dark text-xs font-black uppercase hover:bg-gray-50 active:scale-95 transition-all"
+              >
+                Test Voice Alert
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Tab Visibility Settings */}
         <div className="rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md p-5 shadow-card">
           <div className="flex items-center gap-2 border-b border-[#f7f1ec] pb-3">
@@ -114,3 +255,4 @@ export default function SettingsScreen() {
     </section>
   );
 }
+

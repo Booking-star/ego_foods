@@ -1,5 +1,6 @@
 import { CheckCircle2, ChevronDown, ChevronUp, Image, XCircle, AlertTriangle } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import dayjs from 'dayjs';
 import Modal from './Modal';
 import { STATUS_META } from '../lib/business';
@@ -51,6 +52,18 @@ export default function OrderCard({
   const meta = STATUS_META[order.status] || STATUS_META.new;
   const action = nextAction[order.status];
   const isPaidNew = (order.status === 'new' || order.status === 'payment_pending') && order.payment_confirmed;
+
+  const [showGlow, setShowGlow] = useState(isPaidNew);
+
+  useEffect(() => {
+    if (isPaidNew) {
+      const timer = setTimeout(() => {
+        setShowGlow(false);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isPaidNew]);
+
   const primaryLabel = isPaidNew ? 'Accept' : action?.[0];
   const primaryStatus = isPaidNew ? 'preparing' : action?.[1];
   const ageMinutes = dayjs().diff(dayjs(order.created_at), 'minute');
@@ -113,9 +126,14 @@ export default function OrderCard({
 
   return (
     <>
-      <article
+      <motion.article
+        layout
+        initial={{ opacity: 0, y: -12, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ type: 'spring', stiffness: 350, damping: 25 }}
         onClick={() => dismissAlarmForOrder(order.id)}
-        className={`relative rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md shadow-card hover:scale-[1.01] hover:shadow-lg transition-all duration-200 ${isPulsing ? 'pulse-danger' : ''} ${muted ? 'opacity-75' : ''}`}
+        className={`relative rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md shadow-card hover:scale-[1.01] hover:shadow-lg transition-all duration-200 ${isPulsing ? 'pulse-danger' : ''} ${muted ? 'opacity-75' : ''} ${showGlow ? 'shadow-[0_0_12px_rgba(242,108,35,0.6)] border-[#f26c23]' : ''}`}
         style={{ borderTop: `4px solid ${meta.border}` }}
       >
         <div className="p-3">
@@ -304,7 +322,7 @@ export default function OrderCard({
             </div>
           </div>
         ) : null}
-      </article>
+      </motion.article>
 
       {screenshotOpen ? (
         <Modal

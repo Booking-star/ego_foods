@@ -1,6 +1,8 @@
-import { AlertTriangle, TimerReset } from 'lucide-react';
+import { AlertTriangle, TimerReset, UtensilsCrossed } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useRef, useState } from 'react';
 import OrderCard from '../components/OrderCard';
+import AnimatedNumber from '../components/AnimatedNumber';
 import { activeToday, completedToday, orderItemPortionKg, sortOrders } from '../lib/business';
 import { useInventoryStore } from '../store/inventoryStore';
 import { useOrderStore } from '../store/orderStore';
@@ -95,7 +97,7 @@ export default function OrderQueue() {
               }`}
             >
               <span className="block truncate">{tab.label}</span>
-              <span className="text-[13px] text-text-dark">{tabCounts[tab.id]}</span>
+              <span className="text-[13px] text-text-dark"><AnimatedNumber value={tabCounts[tab.id]} /></span>
               {activeTab ? <span className="absolute bottom-0 left-0 h-[3px] w-full rounded-t bg-primary" /> : null}
             </button>
           );
@@ -105,7 +107,7 @@ export default function OrderQueue() {
       <div ref={topRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 scrollbar-none lg:px-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-black text-text-dark">Order Queue <span className="ml-2 rounded-full bg-[#fff0e5] px-2 py-1 text-[12px] text-[#a74608]">{visibleOrders.length} Active</span></h1>
+            <h1 className="text-xl font-black text-text-dark">Order Queue <span className="ml-2 rounded-full bg-[#fff0e5] px-2 py-1 text-[12px] text-[#a74608]"><AnimatedNumber value={visibleOrders.length} /> Active</span></h1>
             <p className="mt-1 text-[13px] font-semibold text-text-muted">Accept paid WhatsApp orders, track preparation, and finish pickup.</p>
           </div>
           <div className="flex gap-2">
@@ -128,13 +130,23 @@ export default function OrderQueue() {
         ) : null}
 
         {visibleOrders.length === 0 ? (
-          <div className="flex min-h-[380px] items-center justify-center">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex min-h-[380px] items-center justify-center"
+          >
             <div className="text-center">
-              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-[#FFE9B8] text-4xl">!</div>
-              <h2 className="text-4xl font-black text-[#8B8D99]">No Orders!</h2>
+              <motion.div
+                animate={{ y: [0, -10, 0] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-[#fdf2e9] text-primary border border-primary/20 shadow-sm"
+              >
+                <UtensilsCrossed size={40} className="text-primary" />
+              </motion.div>
+              <h2 className="text-3xl font-black text-text-dark">No Orders!</h2>
               <p className="mt-2 text-sm font-semibold text-text-muted">New orders will appear here automatically.</p>
             </div>
-          </div>
+          </motion.div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {visibleOrders.map((order) => (

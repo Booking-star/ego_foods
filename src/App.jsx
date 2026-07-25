@@ -17,12 +17,16 @@ import {
   ChefHat,
   Pin
 } from 'lucide-react';
-import { startAlarm, unlockAudio } from './lib/audio';
+import { unlockAudio } from './lib/audio';
 import { applyExternalMappingsToOrders, orderPortionKgByMenu } from './lib/business';
 import { fetchKitchenOrders, fetchKitchenSettings, hasKitchenApi, updateKitchenSettings } from './lib/kitchenApi';
 import { importSwiggyNow, onSwiggyProgress } from './lib/swiggyBridge';
 import { subscribeToOrders, supabase } from './lib/supabase';
 import { useAppStore } from './store/appStore';
+import { alertManager } from './lib/alertManager';
+import { useAlertStore } from './store/alertStore';
+import MascotAssistant from './components/MascotAssistant';
+import PremiumToasts from './components/PremiumToasts';
 import { useCashStore } from './store/cashStore';
 import { useExpenseStore } from './store/expenseStore';
 import { sampleBatchLogs, sampleIngredients, sampleMenuItems, sampleRecipes, samplePortions } from './lib/sampleData';
@@ -289,6 +293,8 @@ export default function App() {
     }
 
     loadSupabaseData();
+    alertManager.initialize();
+    
     const kitchenPoll = hasKitchenApi
       ? setInterval(() => {
           loadKitchenOrders().catch(() => {});
@@ -300,7 +306,6 @@ export default function App() {
         if (order.status === 'completed') {
           useOrderStore.getState().deductRecipesForOrder(order);
         } else {
-          startAlarm();
           requestAnimationFrame(() => document.querySelector('[data-app-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' }));
         }
       },
@@ -529,6 +534,24 @@ export default function App() {
       </aside>
 
       <div className="relative flex min-w-0 flex-1 flex-col">
+        {!useAlertStore((state) => state.audioPermissionGranted) && (
+          <div className="flex shrink-0 items-center justify-between bg-[#fff0e5] border-b border-[#eadfd7] px-5 py-2.5 text-xs font-black text-[#7a3508]">
+            <span className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-danger animate-pulse" />
+              Audio permission is required for order alerts.
+            </span>
+            <button
+              onClick={() => {
+                unlockAudio();
+                alertManager.playAudio(alertManager.voiceSingle, 0.0);
+                useAlertStore.getState().setAudioPermissionGranted(true);
+              }}
+              className="rounded bg-primary px-3 py-1 text-[11px] font-black uppercase text-white hover:bg-opacity-95 active:scale-95 transition-transform"
+            >
+              Enable Order Alerts
+            </button>
+          </div>
+        )}
         <header className="shrink-0 border-b border-[#eadfd7]/60 bg-white/70 backdrop-blur-md text-text-dark">
           <div className="grid min-h-[74px] gap-3 px-5 py-3 xl:grid-cols-[minmax(240px,1fr)_auto] xl:items-center">
             <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -593,6 +616,8 @@ export default function App() {
         <main className="min-h-0 flex-1 flex flex-col overflow-hidden bg-transparent">
           <Screen />
         </main>
+      <MascotAssistant />
+      <PremiumToasts />
       </div>
     </div>
   );

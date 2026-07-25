@@ -4,8 +4,8 @@ import { hasKitchenApi, updateKitchenOrderStatus } from '../lib/kitchenApi';
 import { sampleOrders } from '../lib/sampleData';
 import { activeToday, completedToday, generatePickupCode, orderPortionKg } from '../lib/business';
 import { uid } from '../lib/format';
-import { startAlarm, stopAlarm } from '../lib/audio';
 import { useAppStore } from './appStore';
+import { alertManager } from '../lib/alertManager';
 
 function isPaidNew(order) {
   return order?.payment_confirmed && (order.status === 'new' || order.status === 'payment_pending');
@@ -31,8 +31,6 @@ export const useOrderStore = create((set, get) => ({
     const byId = new Map(nextOrders.map((order) => [order.swiggy_order_id || order.id, order]));
     const mergedOrders = Array.from(byId.values());
     const alarmOrderIds = new Set(mergedOrders.filter(isPaidNew).map((order) => order.id));
-    if (alarmOrderIds.size) startAlarm();
-    else stopAlarm();
     set({ orders: mergedOrders, alarmOrderIds });
   },
   mergeImportedOrders: (importedOrders) =>
@@ -46,7 +44,6 @@ export const useOrderStore = create((set, get) => ({
       const alarmOrderIds = new Set(state.alarmOrderIds);
       if (isPaidNew(order)) {
         alarmOrderIds.add(order.id);
-        startAlarm();
       }
       return {
         orders: [order, ...state.orders.filter((item) => item.id !== order.id)],
@@ -85,7 +82,6 @@ export const useOrderStore = create((set, get) => ({
     set((state) => {
       const alarmOrderIds = new Set(state.alarmOrderIds);
       alarmOrderIds.delete(orderId);
-      if (alarmOrderIds.size === 0) stopAlarm();
       return { alarmOrderIds };
     });
   },
@@ -95,6 +91,12 @@ export const useOrderStore = create((set, get) => ({
     if (status === 'preparing' && !extra.payment_confirmed && !previous.payment_confirmed) {
       return { ok: false, message: 'Confirm the payment before preparing this order.' };
     }
+    
+    // Notify alert manager that an order has been accepted
+    if (status === 'preparing') {
+      alertManager.markOrderAccepted();
+    }
+
     const finalExtra = status === 'completed' ? { ...extra, payment_screenshot_url: '' } : extra;
     const next = { ...previous, ...finalExtra, status, updated_at: new Date().toISOString() };
     if (hasKitchenApi && previous.source === 'whatsapp') {
