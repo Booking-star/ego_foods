@@ -6,6 +6,7 @@ import { activeToday, completedToday, generatePickupCode, orderPortionKg } from 
 import { uid } from '../lib/format';
 import { useAppStore } from './appStore';
 import { alertManager } from '../lib/alertManager';
+import { useAlertStore } from './alertStore';
 
 function isPaidNew(order) {
   return order?.payment_confirmed && (order.status === 'new' || order.status === 'payment_pending');
@@ -95,6 +96,38 @@ export const useOrderStore = create((set, get) => ({
     // Notify alert manager that an order has been accepted
     if (status === 'preparing') {
       alertManager.markOrderAccepted();
+    }
+
+    // Trigger mascot chef visual feedback state
+    try {
+      const alertStore = useAlertStore.getState();
+      if (status === 'preparing') {
+        alertStore.setMascotState('preparing', 'Cooking started!');
+        setTimeout(() => {
+          if (useAlertStore.getState().mascotState === 'preparing') {
+            useAlertStore.getState().setMascotState('idle', '');
+            useAlertStore.getState().minimizeMascot();
+          }
+        }, 1800);
+      } else if (status === 'ready') {
+        alertStore.setMascotState('ready', 'Order is ready!');
+        setTimeout(() => {
+          if (useAlertStore.getState().mascotState === 'ready') {
+            useAlertStore.getState().setMascotState('idle', '');
+            useAlertStore.getState().minimizeMascot();
+          }
+        }, 1800);
+      } else if (status === 'completed') {
+        alertStore.setMascotState('completed', 'Order completed. Great job!');
+        setTimeout(() => {
+          if (useAlertStore.getState().mascotState === 'completed') {
+            useAlertStore.getState().setMascotState('idle', '');
+            useAlertStore.getState().minimizeMascot();
+          }
+        }, 1800);
+      }
+    } catch (e) {
+      console.warn('Mascot trigger warning:', e);
     }
 
     const finalExtra = status === 'completed' ? { ...extra, payment_screenshot_url: '' } : extra;

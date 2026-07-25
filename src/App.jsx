@@ -143,7 +143,17 @@ export default function App() {
     setSwiggyProgress({ percent: 3, message: 'Starting Swiggy import...' });
     try {
       const result = await importSwiggyNow({ visible: true });
-      if (result.importedOrders) mergeImportedOrders(applySwiggyMappings(result.importedOrders));
+      if (result.importedOrders) {
+        mergeImportedOrders(applySwiggyMappings(result.importedOrders));
+        const count = result.importedOrders.length;
+        useAlertStore.getState().setMascotState('swiggy_import_success', `${count} Swiggy orders imported successfully!`);
+        setTimeout(() => {
+          if (useAlertStore.getState().mascotState === 'swiggy_import_success') {
+            useAlertStore.getState().setMascotState('idle', '');
+            useAlertStore.getState().minimizeMascot();
+          }
+        }, 3000);
+      }
       setNotice(result.ok ? 'Swiggy import complete.' : result.status || 'Swiggy import needs attention.');
     } catch {
       setTab('swiggy');
@@ -396,6 +406,51 @@ export default function App() {
     const timeout = setTimeout(() => setNotice(''), 4500);
     return () => clearTimeout(timeout);
   }, [notice]);
+
+  // Listen to printer status
+  useEffect(() => {
+    if (printerOnline === false) {
+      useAlertStore.getState().setMascotState(
+        'printer_disconnected',
+        'Printer disconnected. Please check the connection.'
+      );
+    } else {
+      if (useAlertStore.getState().mascotState === 'printer_disconnected') {
+        useAlertStore.getState().setMascotState('idle', '');
+        useAlertStore.getState().minimizeMascot();
+      }
+    }
+  }, [printerOnline]);
+
+  // Listen to tab switches (Summary/Reports Business Insights)
+  useEffect(() => {
+    if (tab === 'summary') {
+      const todayTotal = useOrderStore.getState().paidTodayTotal();
+      const ordersCount = useOrderStore.getState().orders.filter((o) => o.status === 'completed').length;
+      const message = `Hey Boss! Today's sales are ₹${todayTotal} across ${ordersCount} completed orders. Keep up the great work!`;
+      useAlertStore.getState().setMascotState('swiggy_import_success', message);
+    } else {
+      if (useAlertStore.getState().mascotState === 'swiggy_import_success') {
+        useAlertStore.getState().setMascotState('idle', '');
+        useAlertStore.getState().minimizeMascot();
+      }
+    }
+  }, [tab]);
+
+  // Listen to low stock warning
+  const recipes = useInventoryStore((state) => state.recipes);
+  useEffect(() => {
+    const lowStock = recipes.filter(r => Number(r.current_stock || 0) <= Number(r.min_stock || 2.0));
+    if (lowStock.length > 0) {
+      const names = lowStock.map(r => r.name).join(', ');
+      useAlertStore.getState().setMascotState('low_stock', `${names} running low! Please check inventory.`);
+    } else {
+      if (useAlertStore.getState().mascotState === 'low_stock') {
+        useAlertStore.getState().setMascotState('idle', '');
+        useAlertStore.getState().minimizeMascot();
+      }
+    }
+  }, [recipes]);
 
   if (!license.ok || remoteLicense.active === false) {
     return (
