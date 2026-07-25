@@ -522,11 +522,12 @@ export default function CounterSales() {
       setCart([]);
       return;
     }
-    if (!confirm('Are you sure you want to cancel and delete this order?')) return;
+    if (!confirm('Are you sure you want to cancel this order?')) return;
     setLoading(true);
 
     try {
-      await supabase.from('orders').delete().eq('id', currentActiveOrder.id);
+      const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', currentActiveOrder.id);
+      if (error) throw error;
       setMessage('Order cancelled successfully.');
       setCart([]);
       fetchActiveOrders();
@@ -539,7 +540,7 @@ export default function CounterSales() {
   }
 
   return (
-    <section className="grid h-full bg-[#f7f1ec] lg:grid-cols-[1fr_380px]">
+    <section className="grid h-full bg-transparent lg:grid-cols-[1fr_380px]">
       <div className="min-h-0 overflow-y-auto p-5 scrollbar-none">
         
         {/* Dine-In Tables Selector */}
@@ -552,12 +553,12 @@ export default function CounterSales() {
           <button
             type="button"
             onClick={() => setSelectedTable('Takeaway')}
-            className={`flex flex-col items-center justify-center p-3 rounded border text-[13px] font-black transition-all ${
+            className={`flex flex-col items-center justify-center p-3 rounded-lg border text-[13px] font-black transition-all ${
               selectedTable === 'Takeaway'
-                ? 'border-primary bg-primary text-white'
+                ? 'border-primary bg-primary text-white shadow-md'
                 : activeOrders.some((o) => o.order_type === 'takeaway')
                 ? 'border-orange-300 bg-orange-50 text-orange-800'
-                : 'border-[#eadfd7] bg-white text-text-dark'
+                : 'border-[#eadfd7]/60 bg-white/70 backdrop-blur-md text-text-dark hover:bg-white'
             }`}
           >
             <span>Takeaway</span>
@@ -575,12 +576,12 @@ export default function CounterSales() {
                 key={num}
                 type="button"
                 onClick={() => setSelectedTable(num)}
-                className={`flex flex-col items-center justify-center p-3 rounded border text-[13px] font-black transition-all ${
+                className={`flex flex-col items-center justify-center p-3 rounded-lg border text-[13px] font-black transition-all ${
                   selectedTable === num
-                    ? 'border-primary bg-primary text-white'
+                    ? 'border-primary bg-primary text-white shadow-md'
                     : tableOrder
                     ? 'border-amber-500 bg-amber-50 text-amber-800'
-                    : 'border-[#eadfd7] bg-white text-text-dark'
+                    : 'border-[#eadfd7]/60 bg-white/70 backdrop-blur-md text-text-dark hover:bg-white'
                 }`}
               >
                 <span>T - {num}</span>
@@ -596,8 +597,8 @@ export default function CounterSales() {
         <h2 className="mb-3 text-lg font-black text-text-dark">Counter Menu Items</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {saleItems.map((item) => (
-            <div key={item.id} className={`rounded border bg-white p-4 shadow-sm relative transition-all ${
-              item.isAvailable ? 'border-[#eadfd7]' : 'border-red-200 bg-red-50/20 opacity-90'
+            <div key={item.id} className={`rounded-xl border bg-white/70 backdrop-blur-md p-4 shadow-sm relative transition-all hover:scale-[1.01] hover:shadow-md ${
+              item.isAvailable ? 'border-[#eadfd7]/60' : 'border-red-200 bg-red-50/20 opacity-90'
             }`}>
               {!item.isAvailable && (
                 <span className="absolute top-2 right-2 px-1.5 py-0.5 text-[9px] font-black uppercase rounded bg-red-100 text-red-700 tracking-wider">
@@ -650,7 +651,7 @@ export default function CounterSales() {
       </div>
 
       {/* Cart Summary Panel */}
-      <aside className="flex flex-col border-l border-[#eadfd7] bg-white p-5">
+      <aside className="flex flex-col border-l border-[#eadfd7]/60 bg-white/75 backdrop-blur-md p-5">
         <h2 className="text-lg font-black text-text-dark">
           {selectedTable === 'Takeaway' ? 'Takeaway Order' : `Table ${selectedTable} Order`}
         </h2>
