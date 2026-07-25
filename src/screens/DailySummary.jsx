@@ -129,7 +129,7 @@ export default function DailySummary() {
   const worstWaste = week.reduce((max, day) => (day.waste > max.waste ? day : max), week[0]);
 
   return (
-    <section className="h-full overflow-y-auto bg-[#f7f1ec] p-5 scrollbar-none">
+    <section className="h-full overflow-y-auto bg-transparent p-5 scrollbar-none">
       <header className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-black text-text-dark">Summary & Reports</h1>

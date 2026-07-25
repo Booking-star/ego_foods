@@ -200,7 +200,7 @@ export default function Inventory() {
   }
 
   return (
-    <section className="h-full overflow-y-auto bg-[#f7f1ec] p-5 pb-6 scrollbar-none">
+    <section className="h-full overflow-y-auto bg-transparent p-5 pb-6 scrollbar-none">
       <header className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-black text-text-dark">Inventory & Batch Management</h1>

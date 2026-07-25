@@ -404,7 +404,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen min-h-[680px] w-screen overflow-hidden bg-bg-secondary text-text-dark" data-app-scroll>
+    <div className="flex h-screen min-h-[680px] w-screen overflow-hidden bg-gradient-to-br from-[#fdfcfb] via-[#f5ede6] to-[#eeddd0] text-text-dark" data-app-scroll>
       <aside className="flex w-[164px] shrink-0 flex-col border-r border-[#eadfd7] bg-white/70 backdrop-blur-md text-[#4b2b19] scrollbar-none max-[860px]:w-[82px]">
         <button
           type="button"

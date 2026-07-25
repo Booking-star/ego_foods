@@ -102,7 +102,7 @@ export default function CompletedSales() {
 
   if (viewType === 'cash') {
     return (
-      <div className="h-full flex flex-col bg-[#f7f1ec]">
+      <div className="h-full flex flex-col bg-transparent">
         {/* Toggle headers */}
         <div className="px-5 pt-5 pb-2 flex gap-2 shrink-0">
           <button
@@ -128,7 +128,7 @@ export default function CompletedSales() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#f7f1ec]">
+    <div className="h-full flex flex-col bg-transparent">
       {/* Toggle headers */}
       <div className="px-5 pt-5 pb-2 flex gap-2 shrink-0">
         <button

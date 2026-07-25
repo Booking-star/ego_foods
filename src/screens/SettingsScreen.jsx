@@ -32,14 +32,14 @@ export default function SettingsScreen() {
   }, []);
 
   return (
-    <section className="h-full overflow-y-auto bg-[#f7f1ec] p-5 scrollbar-none">
+    <section className="h-full overflow-y-auto bg-transparent p-5 scrollbar-none">
       <header className="mb-5">
         <h1 className="text-xl font-black text-text-dark">Settings & Printing</h1>
         <p className="mt-1 text-[13px] font-semibold text-text-muted">Operational settings used by the desktop app.</p>
       </header>
 
       <div className="max-w-2xl space-y-6">
-        <div className="rounded-sm border border-[#eadfd7] bg-white p-5 shadow-card">
+        <div className="rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md p-5 shadow-card">
           <div className="flex items-center gap-2 border-b border-[#f7f1ec] pb-3">
             <Printer size={18} className="text-primary" />
             <h2 className="text-base font-black text-text-dark uppercase tracking-wider">Printer Settings</h2>
@@ -87,7 +87,7 @@ export default function SettingsScreen() {
         </div>
 
         {/* Tab Visibility Settings */}
-        <div className="rounded-sm border border-[#eadfd7] bg-white p-5 shadow-card">
+        <div className="rounded-xl border border-[#eadfd7]/60 bg-white/70 backdrop-blur-md p-5 shadow-card">
           <div className="flex items-center gap-2 border-b border-[#f7f1ec] pb-3">
             <h2 className="text-base font-black text-text-dark uppercase tracking-wider">Tab Visibility Settings</h2>
           </div>
