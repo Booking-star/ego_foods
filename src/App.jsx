@@ -477,7 +477,7 @@ export default function App() {
       </aside>
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <header className="shrink-0 border-b border-[#eadfd7] bg-[#fffaf6] text-text-dark">
+        <header className="shrink-0 border-b border-[#eadfd7]/60 bg-white/70 backdrop-blur-md text-text-dark">
           <div className="grid min-h-[74px] gap-3 px-5 py-3 xl:grid-cols-[minmax(240px,1fr)_auto] xl:items-center">
             <div className="flex min-w-0 flex-wrap items-center gap-3">
               <p className="mr-2 text-[13px] font-black uppercase text-text-dark">Main Kitchen</p>
@@ -538,7 +538,7 @@ export default function App() {
             {notice}
           </div>
         ) : null}
-        <main className="min-h-0 flex-1 flex flex-col overflow-hidden bg-[#f7f1ec]">
+        <main className="min-h-0 flex-1 flex flex-col overflow-hidden bg-transparent">
           <Screen />
         </main>
       </div>
