@@ -195,7 +195,7 @@ export default function MascotAssistant() {
         }`}>
           {/* Chef Mascot Image with breathing keyframes */}
           <img
-            src="/chef_mascot.png"
+            src="chef_mascot.png"
             alt="Chef Mascot"
             className={`h-full w-full object-cover transition-transform duration-300 ${
               showMascot ? 'scale-105' : 'scale-90 group-hover:scale-100'
