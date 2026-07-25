@@ -161,21 +161,40 @@ export const useOrderStore = create((set, get) => ({
       }
     }
 
-    const { portions, menuItemComponents, recipes } = useInventoryStore.getState();
+    const { portions, menuItemComponents, recipes, ingredients, menuItems } = useInventoryStore.getState();
     const recipeDeductions = {};
+    const ingredientDeductions = {};
 
     const items = Array.isArray(order.items) ? order.items : [];
     for (const item of items) {
       const portionId = item.portion_id || item.id;
       const portion = portions.find(p => p.id === portionId);
-      if (!portion) continue;
+      
+      const menuItem = menuItems.find(m => m.id === item.menu_item_id || m.name === item.name);
+      if (menuItem) {
+        // Calculate portion weight sold in kg
+        const portionGrams = item.portion_grams || (item.variant === 'half' ? menuItem.portion_half_grams : menuItem.portion_full_grams) || 0;
+        const qty = Number(item.quantity || item.qty || 1);
+        const kgSold = (Number(portionGrams) / 1000) * qty;
 
-      const components = menuItemComponents.filter(c => c.portion_id === portion.id);
-      for (const comp of components) {
-        if (comp.component_type === 'recipe' && comp.recipe_id) {
-          const qtyUsed = Number(comp.quantity_in_base_unit || comp.quantity || 0); // in grams
-          const kgUsed = (qtyUsed / 1000) * Number(item.quantity || item.qty || 1);
-          recipeDeductions[comp.recipe_id] = (recipeDeductions[comp.recipe_id] || 0) + kgUsed;
+        // Find recipes mapped to this menu_item_id
+        const mappedRecipes = recipes.filter(r => r.menu_item_id === menuItem.id);
+        for (const recipe of mappedRecipes) {
+          if (recipe.ingredient_id) {
+            const deduction = Number(recipe.quantity_per_kg || 0) * kgSold;
+            ingredientDeductions[recipe.ingredient_id] = (ingredientDeductions[recipe.ingredient_id] || 0) + deduction;
+          }
+        }
+      }
+
+      if (portion) {
+        const components = menuItemComponents.filter(c => c.portion_id === portion.id);
+        for (const comp of components) {
+          if (comp.component_type === 'recipe' && comp.recipe_id) {
+            const qtyUsed = Number(comp.quantity_in_base_unit || comp.quantity || 0); // in grams
+            const kgUsed = (qtyUsed / 1000) * Number(item.quantity || item.qty || 1);
+            recipeDeductions[comp.recipe_id] = (recipeDeductions[comp.recipe_id] || 0) + kgUsed;
+          }
         }
       }
     }
@@ -191,12 +210,27 @@ export const useOrderStore = create((set, get) => ({
             .eq('id', recipeId);
         }
       }
+
+      for (const [ingId, qty] of Object.entries(ingredientDeductions)) {
+        const ing = ingredients.find(i => i.id === ingId);
+        if (ing) {
+          const nextStock = Math.max(0, Number(ing.current_stock || 0) - qty);
+          await supabase
+            .from('ingredients')
+            .update({ current_stock: nextStock })
+            .eq('id', ingId);
+        }
+      }
     }
 
     useInventoryStore.setState((state) => ({
       recipes: state.recipes.map(r => {
         const consumed = recipeDeductions[r.id];
         return consumed ? { ...r, current_stock: Number(r.current_stock || 0) - consumed } : r;
+      }),
+      ingredients: state.ingredients.map(ing => {
+        const consumed = ingredientDeductions[ing.id];
+        return consumed ? { ...ing, current_stock: Math.max(0, Number(ing.current_stock || 0) - consumed) } : ing;
       })
     }));
   },

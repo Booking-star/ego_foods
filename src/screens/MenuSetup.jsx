@@ -182,6 +182,8 @@ export default function MenuSetup() {
 
       const costPerBaseUnit = activeIngredient.purchase_price / (qtyBase || 1);
 
+      const nextStock = Number(activeIngredient.purchase_quantity || 0);
+
       const row = {
         restaurant_id: dbState.restaurantId,
         category_id: activeIngredient.category_id || null,
@@ -193,21 +195,39 @@ export default function MenuSetup() {
         cost_per_base_unit: costPerBaseUnit,
         supplier_name: activeIngredient.supplier_name || null,
         notes: activeIngredient.notes || null,
-        current_stock: activeIngredient.current_stock || 0,
+        current_stock: nextStock,
         low_stock_threshold: activeIngredient.low_stock_threshold || 1,
         is_active: activeIngredient.is_active ?? true
       };
 
       let err;
+      let insertedId = activeIngredient.id;
       if (activeIngredient.id) {
         const { error } = await supabase.from("ingredients").update(row).eq("id", activeIngredient.id);
         err = error;
       } else {
-        const { error } = await supabase.from("ingredients").insert(row);
+        const { data, error } = await supabase.from("ingredients").insert(row).select("id").single();
         err = error;
+        if (data) insertedId = data.id;
       }
 
       if (err) throw err;
+
+      // Log purchase of raw ingredients into expenses
+      if (Number(activeIngredient.purchase_price || 0) > 0) {
+        try {
+          const { useExpenseStore } = await import('../store/expenseStore');
+          await useExpenseStore.getState().addExpense({
+            type: 'Ingredients',
+            description: `Purchased ${activeIngredient.purchase_quantity} ${activeIngredient.purchase_unit || 'kg'} of ${activeIngredient.name.trim()}`,
+            amount: Number(activeIngredient.purchase_price),
+            ingredient_id: insertedId || null
+          });
+        } catch (expErr) {
+          console.warn("Failed to log ingredient purchase expense:", expErr);
+        }
+      }
+
       triggerNotification("Ingredient saved successfully.", "success");
       setIngredientModalOpen(false);
       loadData();
