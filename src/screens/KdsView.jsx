@@ -60,7 +60,7 @@ export default function KdsView() {
         ) : (
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {preparingOrders.map((order) => {
-              const elapsedMins = currentTime.diff(dayjs(order.updated_at || order.created_at), 'minute');
+              const elapsedMins = currentTime.diff(dayjs(order.created_at), 'minute');
               const isOverrun = elapsedMins >= 15;
               const sourceLabel = order.source === 'swiggy' ? 'Swiggy' : order.source === 'counter' ? 'Counter' : 'WhatsApp';
 
@@ -110,16 +110,24 @@ export default function KdsView() {
 
                   {/* Items List */}
                   <div className="p-3 flex-1 space-y-2">
-                    {(order.items || []).map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-start gap-2 text-sm font-extrabold">
-                        <span className="text-text-dark leading-5">
-                          {item.name} {item.variant ? `(${item.variant})` : ''}
-                        </span>
-                        <span className="text-primary text-base font-black px-1.5 py-0.5 rounded bg-primary/10 shrink-0">
-                          x{item.qty || item.quantity || 1}
-                        </span>
-                      </div>
-                    ))}
+                    {(order.items || []).map((item, idx) => {
+                      const itemMins = item.added_at ? currentTime.diff(dayjs(item.added_at), 'minute') : null;
+                      return (
+                        <div key={idx} className="flex justify-between items-start gap-2 text-sm font-extrabold">
+                          <span className="text-text-dark leading-5">
+                            {item.name} {item.variant ? `(${item.variant})` : ''}
+                            {itemMins !== null && (
+                              <span className="text-[10px] text-text-muted font-semibold block mt-0.5">
+                                Ordered {itemMins}m ago
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-primary text-base font-black px-1.5 py-0.5 rounded bg-primary/10 shrink-0">
+                            x{item.qty || item.quantity || 1}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {/* Complete Button */}

@@ -330,16 +330,24 @@ export default function CounterSales() {
         });
       }
 
-      // Save order payload
-      const updatedItems = currentCart.map((item) => ({
-        portion_id: item.portion_id,
-        name: item.name,
-        price: item.price,
-        portion_grams: Number(item.grams || 0),
-        quantity: item.quantity,
-        qty: item.quantity,
-        printed_quantity: item.quantity
-      }));
+
+
+      // Save order payload with added_at timestamps
+      const updatedItems = currentCart.map((item) => {
+        const dbItem = currentActiveOrder?.items?.find(
+          (di) => (di.portion_id || di.id) === (item.portion_id || item.id)
+        );
+        return {
+          portion_id: item.portion_id,
+          name: item.name,
+          price: item.price,
+          portion_grams: Number(item.grams || 0),
+          quantity: item.quantity,
+          qty: item.quantity,
+          printed_quantity: item.quantity,
+          added_at: dbItem?.added_at || new Date().toISOString()
+        };
+      });
 
       const pickupCode = currentActiveOrder?.pickup_code || Math.floor(1000 + Math.random() * 9000).toString();
       const customerId = await getCustomerIdIfExists(selectedTable);
