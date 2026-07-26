@@ -91,6 +91,8 @@ const closedMessage = 'Orders are currently not being taken. If we resume in som
 
 export default function App() {
   const isElectron = typeof window !== 'undefined' && (Boolean(window.kitchenOS) || navigator.userAgent.toLowerCase().includes('electron'));
+  const isMac = typeof window !== 'undefined' && navigator.userAgent.toLowerCase().includes('mac');
+  const isWin = typeof window !== 'undefined' && navigator.userAgent.toLowerCase().includes('win');
   const tab = useAppStore((state) => state.tab);
   const setTab = useAppStore((state) => state.setTab);
   const whatsappOpen = useAppStore((state) => state.whatsappOpen);
@@ -493,7 +495,7 @@ export default function App() {
       )}
 
       <aside
-        className={`flex h-full flex-col bg-white/70 backdrop-blur-md text-[#4b2b19] scrollbar-none transition-all duration-300 ease-in-out shrink-0 z-50 overflow-hidden md:relative fixed left-0 top-0 max-md:shadow-2xl ${
+        className={`flex h-full flex-col glass-panel text-[#4b2b19] scrollbar-none transition-all duration-300 ease-in-out shrink-0 z-50 overflow-hidden md:relative fixed left-0 top-0 max-md:shadow-2xl ${
           isSidebarPinned || isSidebarVisible
             ? 'w-[164px] max-[860px]:w-[82px] border-r border-[#eadfd7]'
             : 'w-0 border-r-0'
@@ -502,7 +504,7 @@ export default function App() {
         onMouseLeave={() => setIsSidebarVisible(false)}
       >
         <div className="w-[164px] max-[860px]:w-[82px] flex flex-col h-full shrink-0">
-          <div className="flex h-[74px] shrink-0 items-center justify-between border-b border-[#eadfd7] px-3.5 text-left max-[860px]:justify-center max-[860px]:px-2">
+          <div className={`flex h-[74px] shrink-0 items-center justify-between border-b border-[#eadfd7] px-3.5 text-left max-[860px]:justify-center max-[860px]:px-2 ${isMac ? 'pt-8 h-[98px]' : ''}`}>
             <button
               type="button"
               onClick={() => setTab('orders')}
@@ -607,8 +609,8 @@ export default function App() {
             </button>
           </div>
         )}
-        <header className="shrink-0 border-b border-[#eadfd7]/60 bg-white/70 backdrop-blur-md text-text-dark">
-          <div className="grid min-h-[74px] gap-3 px-5 py-3 xl:grid-cols-[minmax(240px,1fr)_auto] xl:items-center">
+        <header className={`shrink-0 border-b border-[#eadfd7]/60 glass-panel text-text-dark titlebar-drag ${isMac ? 'pl-20' : ''} ${isWin ? 'pr-[132px]' : ''}`}>
+          <div className="titlebar-no-drag grid min-h-[74px] gap-3 px-5 py-3 xl:grid-cols-[minmax(240px,1fr)_auto] xl:items-center">
             <div className="flex min-w-0 flex-wrap items-center gap-3">
               <p className="mr-2 text-[13px] font-black uppercase text-text-dark">Main Kitchen</p>
               <StatusPill color="bg-success" label="Open Status" active />

@@ -240,6 +240,18 @@ function createWindow() {
     icon: fs.existsSync(path.join(__dirname, '..', 'dist', 'logo.png'))
       ? path.join(__dirname, '..', 'dist', 'logo.png')
       : path.join(__dirname, '..', 'public', 'logo.png'),
+    transparent: true,
+    frame: false,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: process.platform === 'win32' ? {
+      color: '#00000000',
+      symbolColor: '#282c3f',
+      height: 40
+    } : false,
+    vibrancy: 'under-window',
+    visualEffectState: 'active',
+    backgroundMaterial: 'acrylic',
+    backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

@@ -12,6 +12,50 @@
   --color-danger: #E02020;
   --color-warning: #FC8019;
   --color-border: #E9E9EB;
+
+  /* Glassmorphism Variables */
+  --glass-blur: 20px;
+  --glass-tint: rgba(255, 253, 250, 0.65);
+  --glass-border: rgba(252, 128, 25, 0.12);
+  --glass-shadow: 0 8px 32px 0 rgba(100, 70, 50, 0.05);
+}
+
+/* Glass panel system */
+.glass-panel {
+  background: var(--glass-tint) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-floating {
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(calc(var(--glass-blur) + 10px)) saturate(180%);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 10px)) saturate(180%);
+  border: 1px solid rgba(252, 128, 25, 0.18) !important;
+  box-shadow: 0 12px 40px 0 rgba(100, 70, 50, 0.12);
+}
+
+/* Titlebar Draggable Area */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Fallback for environments lacking backdrop-filter support */
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-panel {
+    background: #fffcf9 !important;
+    border-color: #eadfd7 !important;
+  }
+  .glass-floating {
+    background: #ffffff !important;
+    border-color: #eadfd7 !important;
+  }
 }
 
 * {
