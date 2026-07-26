@@ -106,8 +106,8 @@ export default function MascotAssistant() {
   const handleActionClick = (action) => {
     if (action === 'inventory') {
       // Toggle sidebar or change screen to inventory
-      const setScreen = useAppStore.getState().setScreen || (() => {});
-      setScreen('inventory');
+      const setTab = useAppStore.getState().setTab || (() => {});
+      setTab('inventory');
       setMascotState('idle', '');
       minimizeMascot();
     } else if (action === 'printer_retry') {
