@@ -89,7 +89,6 @@ export default function SettingsScreen() {
       created_at: new Date().toISOString()
     };
     useOrderStore.getState().addOrder(mockOrder);
-    startAlarm();
   };
 
   return (

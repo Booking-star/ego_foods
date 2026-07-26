@@ -172,6 +172,11 @@ class AlertManager {
       return;
     }
 
+    if (mode === 'voice_only') {
+      this.announcementPhase();
+      return;
+    }
+
     this.cycleState = 'alarm';
     
     // Phase 1: Alarm for 5 seconds

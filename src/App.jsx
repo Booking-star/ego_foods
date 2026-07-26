@@ -194,7 +194,6 @@ export default function App() {
         const newPaid = orders.filter((order) => order.status === 'new' && order.payment_confirmed && !known.has(order.id));
         for (const order of newPaid) addOrder(order);
         if (newPaid.length) {
-          startAlarm();
           requestAnimationFrame(() => document.querySelector('[data-app-scroll]')?.scrollTo({ top: 0, behavior: 'smooth' }));
         }
       }
