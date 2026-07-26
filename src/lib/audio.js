@@ -9,7 +9,7 @@ let fallbackPulse;
 function getAlarm() {
   if (!alarm) {
     alarm = new Howl({
-      src: ['/alarm.mp3'],
+      src: ['alarm.mp3'],
       loop: true,
       volume: 1.0
     });

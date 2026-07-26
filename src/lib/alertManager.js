@@ -23,18 +23,18 @@ class AlertManager {
     // Preload audios using Howler
     try {
       this.alarmAudio = new Howl({
-        src: ['/alarm.mp3'],
+        src: ['alarm.mp3'],
         loop: true,
         volume: 1.0
       });
       
       this.voiceSingle = new Howl({
-        src: ['/new_order_voice.mp3'],
+        src: ['new_order_voice.mp3'],
         volume: 1.0
       });
       
       this.voicePlural = new Howl({
-        src: ['/new_orders_voice.mp3'],
+        src: ['new_orders_voice.mp3'],
         volume: 1.0
       });
     } catch (e) {
