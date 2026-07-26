@@ -1,7 +1,9 @@
 import { Printer, Volume2 } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { useAlertStore } from '../store/alertStore';
+import { useOrderStore } from '../store/orderStore';
 import { alertManager } from '../lib/alertManager';
+import { startAlarm } from '../lib/audio';
 import { useEffect, useState } from 'react';
 
 const ALL_TABS = [
@@ -70,6 +72,25 @@ export default function SettingsScreen() {
     } else {
       alertManager.speakText(customVoiceSingle, voiceVolume);
     }
+  };
+
+  const handleCreateDummyOrder = () => {
+    const mockOrder = {
+      id: `test_${Date.now()}`,
+      order_code: `WA-${Math.floor(100 + Math.random() * 900)}`,
+      customer_name: 'Dummy Customer',
+      customer_phone: '917702449983',
+      items: [
+        { name: 'Chicken Fry Piece Palav (Regular)', qty: 1, price: 200 }
+      ],
+      total_amount: 200,
+      status: 'new',
+      payment_confirmed: true,
+      source: 'whatsapp',
+      created_at: new Date().toISOString()
+    };
+    useOrderStore.getState().addOrder(mockOrder);
+    startAlarm();
   };
 
   return (
@@ -245,13 +266,13 @@ export default function SettingsScreen() {
               </div>
             </div>
 
-            <div className="flex gap-2.5 pt-2">
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={handleTestAlarm}
                 className="flex-1 inline-flex min-h-10 items-center justify-center gap-2 rounded border border-[#eadfd7] bg-white text-text-dark text-xs font-black uppercase hover:bg-gray-50 active:scale-95 transition-all"
               >
-                Test Alarm
+                Test Alarm Sound
               </button>
               <button
                 type="button"
@@ -259,6 +280,13 @@ export default function SettingsScreen() {
                 className="flex-1 inline-flex min-h-10 items-center justify-center gap-2 rounded border border-[#eadfd7] bg-white text-text-dark text-xs font-black uppercase hover:bg-gray-50 active:scale-95 transition-all"
               >
                 Test Voice Alert
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateDummyOrder}
+                className="flex-1 inline-flex min-h-10 items-center justify-center gap-2 rounded bg-primary text-white text-xs font-black uppercase hover:bg-primary/95 active:scale-95 transition-all"
+              >
+                Simulate WA Order
               </button>
             </div>
           </div>

@@ -9,6 +9,9 @@ import { alertManager } from '../lib/alertManager';
 import { useAlertStore } from './alertStore';
 
 function isPaidNew(order) {
+  if (!order) return false;
+  const dismissed = useOrderStore.getState?.()?.dismissedOrderIds;
+  if (dismissed && dismissed.has(order.id)) return false;
   return order?.payment_confirmed && (order.status === 'new' || order.status === 'payment_pending');
 }
 
@@ -24,6 +27,7 @@ export const useOrderStore = create((set, get) => ({
   orders: sampleOrders,
   viewedScreenshots: {},
   alarmOrderIds: new Set(),
+  dismissedOrderIds: new Set(),
   setOrders: (orders) => {
     const nextOrders = [
       ...(orders || []),
@@ -31,7 +35,13 @@ export const useOrderStore = create((set, get) => ({
     ];
     const byId = new Map(nextOrders.map((order) => [order.swiggy_order_id || order.id, order]));
     const mergedOrders = Array.from(byId.values());
-    const alarmOrderIds = new Set(mergedOrders.filter(isPaidNew).map((order) => order.id));
+    const dismissed = get().dismissedOrderIds || new Set();
+    const alarmOrderIds = new Set(
+      mergedOrders
+        .filter(isPaidNew)
+        .filter((order) => !dismissed.has(order.id))
+        .map((order) => order.id)
+    );
     set({ orders: mergedOrders, alarmOrderIds });
   },
   mergeImportedOrders: (importedOrders) =>
@@ -98,6 +108,14 @@ export const useOrderStore = create((set, get) => ({
       alertManager.markOrderAccepted();
     }
 
+    set((state) => {
+      const dismissedOrderIds = new Set(state.dismissedOrderIds);
+      dismissedOrderIds.add(orderId);
+      const alarmOrderIds = new Set(state.alarmOrderIds);
+      alarmOrderIds.delete(orderId);
+      return { dismissedOrderIds, alarmOrderIds };
+    });
+
     // Trigger mascot chef visual feedback state
     try {
       const alertStore = useAlertStore.getState();
@@ -132,7 +150,7 @@ export const useOrderStore = create((set, get) => ({
 
     const finalExtra = status === 'completed' ? { ...extra, payment_screenshot_url: '' } : extra;
     const next = { ...previous, ...finalExtra, status, updated_at: new Date().toISOString() };
-    if (hasKitchenApi && previous.source === 'whatsapp') {
+    if (hasKitchenApi && previous.source === 'whatsapp' && !orderId.startsWith('test_')) {
       const saved = await updateKitchenOrderStatus(orderId, status, finalExtra);
       get().upsertOrder(saved);
       if (status === 'preparing') printOrderCopies(saved);
