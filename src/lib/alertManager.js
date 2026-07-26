@@ -36,7 +36,8 @@ class AlertManager {
     // Subscribe to order store changes using standard Zustand subscribe compatible with all versions
     useOrderStore.subscribe(
       (state) => {
-        const isPaidNew = (o) => o?.payment_confirmed && (o.status === 'new' || o.status === 'payment_pending');
+        const dismissed = state.dismissedOrderIds || new Set();
+        const isPaidNew = (o) => o?.payment_confirmed && (o.status === 'new' || o.status === 'payment_pending') && !dismissed.has(o.id);
         const currentPending = (state.orders || []).filter(isPaidNew).map(o => o.id);
         const currentPendingStr = currentPending.slice().sort().join(',');
         

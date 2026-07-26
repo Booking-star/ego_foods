@@ -8,10 +8,9 @@ import { useAppStore } from './appStore';
 import { alertManager } from '../lib/alertManager';
 import { useAlertStore } from './alertStore';
 
-function isPaidNew(order) {
+function isPaidNew(order, dismissedOrderIds) {
   if (!order) return false;
-  const dismissed = useOrderStore.getState?.()?.dismissedOrderIds;
-  if (dismissed && dismissed.has(order.id)) return false;
+  if (dismissedOrderIds && dismissedOrderIds.has(order.id)) return false;
   return order?.payment_confirmed && (order.status === 'new' || order.status === 'payment_pending');
 }
 
@@ -38,8 +37,7 @@ export const useOrderStore = create((set, get) => ({
     const dismissed = get().dismissedOrderIds || new Set();
     const alarmOrderIds = new Set(
       mergedOrders
-        .filter(isPaidNew)
-        .filter((order) => !dismissed.has(order.id))
+        .filter((o) => isPaidNew(o, dismissed))
         .map((order) => order.id)
     );
     set({ orders: mergedOrders, alarmOrderIds });
@@ -53,7 +51,7 @@ export const useOrderStore = create((set, get) => ({
   addOrder: (order) =>
     set((state) => {
       const alarmOrderIds = new Set(state.alarmOrderIds);
-      if (isPaidNew(order)) {
+      if (isPaidNew(order, state.dismissedOrderIds)) {
         alarmOrderIds.add(order.id);
       }
       return {
@@ -89,7 +87,7 @@ export const useOrderStore = create((set, get) => ({
   markScreenshotViewed: (orderId) =>
     set((state) => ({ viewedScreenshots: { ...state.viewedScreenshots, [orderId]: true } })),
   dismissAlarmForOrder: (orderId) => {
-    if (isPaidNew(get().orders.find((order) => order.id === orderId))) return;
+    if (isPaidNew(get().orders.find((order) => order.id === orderId), get().dismissedOrderIds)) return;
     set((state) => {
       const alarmOrderIds = new Set(state.alarmOrderIds);
       alarmOrderIds.delete(orderId);
