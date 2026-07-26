@@ -59,8 +59,7 @@ export default function SettingsScreen() {
     alertManager.playAudio(alertManager.alarmAudio, alarmVolume);
     setTimeout(() => {
       if (alertManager.alarmAudio) {
-        alertManager.alarmAudio.pause();
-        alertManager.alarmAudio.currentTime = 0;
+        alertManager.alarmAudio.stop();
       }
     }, 3000);
   };

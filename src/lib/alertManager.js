@@ -1,6 +1,7 @@
 import { useOrderStore } from '../store/orderStore';
 import { useAlertStore } from '../store/alertStore';
 import { stopAlarm } from './audio';
+import { Howl } from 'howler';
 
 class AlertManager {
   constructor() {
@@ -19,13 +20,23 @@ class AlertManager {
     if (this.initialized) return;
     this.initialized = true;
 
-    // Preload audios
+    // Preload audios using Howler
     try {
-      this.alarmAudio = new Audio('/alarm.mp3');
-      this.alarmAudio.loop = true;
+      this.alarmAudio = new Howl({
+        src: ['/alarm.mp3'],
+        loop: true,
+        volume: 1.0
+      });
       
-      this.voiceSingle = new Audio('/new_order_voice.mp3');
-      this.voicePlural = new Audio('/new_orders_voice.mp3');
+      this.voiceSingle = new Howl({
+        src: ['/new_order_voice.mp3'],
+        volume: 1.0
+      });
+      
+      this.voicePlural = new Howl({
+        src: ['/new_orders_voice.mp3'],
+        volume: 1.0
+      });
     } catch (e) {
       console.warn('Audio preloading failed:', e);
     }
@@ -108,12 +119,10 @@ class AlertManager {
 
     try {
       if (this.alarmAudio) {
-        this.alarmAudio.pause();
-        this.alarmAudio.currentTime = 0;
+        this.alarmAudio.stop();
       }
       if (this.currentVoiceNode) {
-        this.currentVoiceNode.pause();
-        this.currentVoiceNode.currentTime = 0;
+        this.currentVoiceNode.stop();
         this.currentVoiceNode = null;
       }
     } catch (e) {
@@ -121,12 +130,12 @@ class AlertManager {
     }
   }
 
-  async playAudio(audioNode, volume) {
+  playAudio(audioNode, volume) {
     if (!audioNode) return;
     try {
-      audioNode.volume = volume;
-      audioNode.currentTime = 0;
-      await audioNode.play();
+      audioNode.volume(volume);
+      audioNode.stop();
+      audioNode.play();
     } catch (e) {
       console.warn('Audio playback blocked or failed:', e);
     }
