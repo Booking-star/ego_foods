@@ -31,23 +31,27 @@ class AlertManager {
     }
 
     let isFirstCall = true;
+    let prevPendingStr = '';
 
-    // Subscribe to order store changes
+    // Subscribe to order store changes using standard Zustand subscribe compatible with all versions
     useOrderStore.subscribe(
-      (state) => state.orders,
-      (orders) => {
+      (state) => {
         const isPaidNew = (o) => o?.payment_confirmed && (o.status === 'new' || o.status === 'payment_pending');
-        const currentPending = orders.filter(isPaidNew).map(o => o.id);
+        const currentPending = (state.orders || []).filter(isPaidNew).map(o => o.id);
+        const currentPendingStr = currentPending.slice().sort().join(',');
         
         if (isFirstCall) {
           isFirstCall = false;
           this.pendingOrders = new Set(currentPending);
+          prevPendingStr = currentPendingStr;
           return;
         }
 
-        this.updatePendingOrders(currentPending);
-      },
-      { fireImmediately: true }
+        if (currentPendingStr !== prevPendingStr) {
+          prevPendingStr = currentPendingStr;
+          this.updatePendingOrders(currentPending);
+        }
+      }
     );
   }
 
