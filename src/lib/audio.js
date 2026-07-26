@@ -11,9 +11,7 @@ function getAlarm() {
     alarm = new Howl({
       src: ['/alarm.mp3'],
       loop: true,
-      volume: 1.0,
-      onloaderror: startFallbackTone,
-      onplayerror: startFallbackTone
+      volume: 1.0
     });
   }
   return alarm;
