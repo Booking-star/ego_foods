@@ -121,18 +121,19 @@ export default function CounterSales() {
       // Filter by selected branch if in takeaway mode
       const catName = menuItem.category;
       const isRestaurantActive = selectedTable === 'Restaurant' || typeof selectedTable === 'number';
+      const catLower = String(catName || '').toLowerCase();
       if (isRestaurantActive) {
-        const isRestCat = ['veg palavs', 'non-veg palavs', 'desserts', 'starters', 'drinks', 'beverages'].some(c => String(catName).toLowerCase().includes(c));
+        const isRestCat = ['palav', 'biryani', 'dessert', 'starter', 'drink', 'beverage'].some(c => catLower.includes(c));
         if (!isRestCat) return;
       }
       if (selectedTable === 'Tiffins') {
-        const isTiffinCat = ['dosa', 'parotta', 'chapathi', 'drinks', 'beverages'].some(c => String(catName).toLowerCase().includes(c));
+        const isTiffinCat = ['dosa', 'parotta', 'parota', 'chapathi', 'chapati', 'drink', 'beverage'].some(c => catLower.includes(c));
         if (!isTiffinCat) return;
       }
 
       // Apply Veg/Non-Veg filtering
       if (dietFilter !== 'all') {
-        const itemType = String(menuItem.food_type).toLowerCase();
+        const itemType = String(menuItem.food_type || menuItem.item_type || '').toLowerCase();
         if (dietFilter === 'veg' && itemType !== 'veg') return;
         if (dietFilter === 'non-veg' && itemType !== 'non_veg' && itemType !== 'non-veg') return;
       }

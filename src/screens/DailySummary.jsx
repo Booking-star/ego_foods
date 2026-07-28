@@ -37,7 +37,7 @@ export default function DailySummary() {
     return hours.filter((h) => h.sales > 0);
   }, [todayOrders]);
 
-  const menuItems = useInventoryStore((state) => state.menuItems);
+  const menuItems = useInventoryStore((state) => state.menuItems) || [];
 
   const itemProfitability = useMemo(() => {
     const itemsMap = {};
