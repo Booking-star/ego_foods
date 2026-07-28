@@ -240,7 +240,7 @@ function createWindow() {
     icon: fs.existsSync(path.join(__dirname, '..', 'dist', 'logo.png'))
       ? path.join(__dirname, '..', 'dist', 'logo.png')
       : path.join(__dirname, '..', 'public', 'logo.png'),
-    transparent: true,
+    transparent: false,
     frame: false,
     titleBarStyle: 'hidden',
     titleBarOverlay: process.platform === 'win32' ? {
