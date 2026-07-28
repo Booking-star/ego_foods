@@ -646,8 +646,8 @@ export default function MenuSetup() {
     // Diet filter
     let matchesDiet = true;
     if (dietFilter !== "all") {
-      const linkedItem = dbState.menuItems.find(item => item.id === rec.menu_item_id);
-      const isVeg = linkedItem ? (String(linkedItem.item_type || linkedItem.food_type).toLowerCase() === 'veg') : true;
+      const linkedItem = dbState.menuItems.find(item => item.id === rec.menu_item_id || item.name.toLowerCase() === rec.name.toLowerCase());
+      const isVeg = linkedItem ? (String(linkedItem.item_type || linkedItem.food_type).toLowerCase() === 'veg') : (rec.name.toLowerCase().includes('chicken') || rec.name.toLowerCase().includes('egg') || rec.name.toLowerCase().includes('mutton') || rec.name.toLowerCase().includes('kheema') || rec.name.toLowerCase().includes('keema') ? false : true);
       if (dietFilter === "veg" && !isVeg) matchesDiet = false;
       if (dietFilter === "non-veg" && isVeg) matchesDiet = false;
     }
@@ -943,8 +943,8 @@ export default function MenuSetup() {
                           <div className="flex gap-1.5 mt-1 items-center">
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#f7f1ec] text-[#7a6051]">{categoryName}</span>
                             {(() => {
-                              const linkedItem = dbState.menuItems.find(item => item.id === rec.menu_item_id);
-                              const isVeg = linkedItem ? (String(linkedItem.item_type || linkedItem.food_type).toLowerCase() === 'veg') : true;
+                              const linkedItem = dbState.menuItems.find(item => item.id === rec.menu_item_id || item.name.toLowerCase() === rec.name.toLowerCase());
+                              const isVeg = linkedItem ? (String(linkedItem.item_type || linkedItem.food_type).toLowerCase() === 'veg') : (rec.name.toLowerCase().includes('chicken') || rec.name.toLowerCase().includes('egg') || rec.name.toLowerCase().includes('mutton') || rec.name.toLowerCase().includes('kheema') || rec.name.toLowerCase().includes('keema') ? false : true);
                               return (
                                 <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
                                   isVeg ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
