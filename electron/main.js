@@ -251,7 +251,7 @@ function createWindow() {
     vibrancy: 'under-window',
     visualEffectState: 'active',
     backgroundMaterial: 'acrylic',
-    backgroundColor: '#00000000',
+    backgroundColor: '#fffcf9',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
