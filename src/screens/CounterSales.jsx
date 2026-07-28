@@ -495,9 +495,11 @@ export default function CounterSales() {
       const pickupCode = currentActiveOrder?.pickup_code || Math.floor(1000 + Math.random() * 9000).toString();
       const currentCartTotal = currentCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
+      let orderObj = null;
+
       if (currentActiveOrder?.id) {
         // Update existing active order
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('orders')
           .update({
             status: 'completed',
@@ -506,13 +508,16 @@ export default function CounterSales() {
             total_amount: currentCartTotal,
             updated_at: now
           })
-          .eq('id', currentActiveOrder.id);
+          .eq('id', currentActiveOrder.id)
+          .select('*')
+          .single();
         if (error) throw error;
+        orderObj = data;
       } else {
         const customerId = await getCustomerIdIfExists(selectedTable);
         const isTakeaway = selectedTable === 'Restaurant' || selectedTable === 'Tiffins';
         // Insert new order directly as completed (e.g. direct Takeaway settle)
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('orders')
           .insert({
             restaurant_id: restaurantId,
@@ -528,8 +533,16 @@ export default function CounterSales() {
             pickup_code: pickupCode,
             created_at: now,
             updated_at: now
-          });
+          })
+          .select('*')
+          .single();
         if (error) throw error;
+        orderObj = data;
+      }
+
+      // Deduct stock/recipes immediately in real-time!
+      if (orderObj) {
+        await useOrderStore.getState().deductRecipesForOrder(orderObj);
       }
 
       // Log into cash/sales ledger

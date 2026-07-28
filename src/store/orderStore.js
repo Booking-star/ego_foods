@@ -152,6 +152,7 @@ export const useOrderStore = create((set, get) => ({
       const saved = await updateKitchenOrderStatus(orderId, status, finalExtra);
       get().upsertOrder(saved);
       if (status === 'preparing') printOrderCopies(saved);
+      if (status === 'completed') await get().deductRecipesForOrder(saved);
       return { ok: true, previous, next: saved };
     }
     if (supabase) {
@@ -160,6 +161,7 @@ export const useOrderStore = create((set, get) => ({
     }
     get().upsertOrder(next);
     if (status === 'preparing') printOrderCopies(next);
+    if (status === 'completed') await get().deductRecipesForOrder(next);
     return { ok: true, previous, next };
   },
   deductRecipesForOrder: async (order) => {

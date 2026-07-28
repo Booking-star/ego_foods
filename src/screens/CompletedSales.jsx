@@ -270,7 +270,7 @@ export default function CompletedSales() {
                       <span className="text-right">Details</span>
                     </div>
                     {filteredBills.map((bill) => {
-                      const label = bill.source === 'swiggy' ? 'Swiggy' : bill.source === 'whatsapp' ? 'WhatsApp' : bill.order_type === 'takeaway' ? 'Takeaway' : `Table ${bill.table_number}`;
+                      const label = bill.source === 'swiggy' ? 'Swiggy' : bill.source === 'whatsapp' ? 'WhatsApp' : bill.order_type === 'takeaway' ? (bill.customer_name || 'Takeaway') : `Table ${bill.table_number}`;
                       const formattedTime = new Date(bill.created_at).toLocaleString("en-IN", {
                         day: "2-digit",
                         month: "short",
