@@ -38,6 +38,7 @@ export default function MenuSetup() {
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [catFilter, setCatFilter] = useState("all");
+  const [dietFilter, setDietFilter] = useState("all"); // 'all', 'veg', 'non-veg'
 
   // Modal control states
   const [ingredientModalOpen, setIngredientModalOpen] = useState(false);
@@ -641,13 +642,32 @@ export default function MenuSetup() {
   const filteredRecipes = dbState.recipes.filter((rec) => {
     const matchesSearch = rec.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = catFilter === "all" || rec.recipe_category_id === catFilter;
-    return matchesSearch && matchesCat;
+    
+    // Diet filter
+    let matchesDiet = true;
+    if (dietFilter !== "all") {
+      const linkedItem = dbState.menuItems.find(item => item.id === rec.menu_item_id);
+      const isVeg = linkedItem ? (String(linkedItem.item_type || linkedItem.food_type).toLowerCase() === 'veg') : true;
+      if (dietFilter === "veg" && !isVeg) matchesDiet = false;
+      if (dietFilter === "non-veg" && isVeg) matchesDiet = false;
+    }
+    
+    return matchesSearch && matchesCat && matchesDiet;
   });
 
   const filteredMenuItems = dbState.menuItems.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = catFilter === "all" || item.menu_category_id === catFilter;
-    return matchesSearch && matchesCat;
+    
+    // Diet filter
+    let matchesDiet = true;
+    if (dietFilter !== "all") {
+      const isVeg = String(item.item_type || item.food_type).toLowerCase() === 'veg';
+      if (dietFilter === "veg" && !isVeg) matchesDiet = false;
+      if (dietFilter === "non-veg" && isVeg) matchesDiet = false;
+    }
+    
+    return matchesSearch && matchesCat && matchesDiet;
   });
 
   return (
@@ -682,6 +702,7 @@ export default function MenuSetup() {
                 setActiveTab(t.key);
                 setSearchQuery("");
                 setCatFilter("all");
+                setDietFilter("all");
               }}
               className={`rounded-sm px-4 py-2 text-[13px] font-black transition-all ${
                 activeTab === t.key
@@ -827,8 +848,8 @@ export default function MenuSetup() {
           {activeTab === "recipes" && (
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2.5 items-center justify-between">
-                <div className="flex gap-2 flex-1 max-w-lg">
-                  <div className="relative flex-1">
+                <div className="flex gap-2 flex-1 max-w-2xl">
+                  <div className="relative flex-1 min-w-[200px]">
                     <Search size={14} className="absolute left-3 top-3 text-text-muted" />
                     <input
                       type="text"
@@ -848,6 +869,43 @@ export default function MenuSetup() {
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
+                  
+                  {/* Veg/Non-Veg Toggles */}
+                  <div className="flex border border-[#eadfd7]/60 rounded-md p-0.5 bg-white shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setDietFilter('all')}
+                      className={`px-3 py-0.5 rounded text-[11px] font-black transition-all ${
+                        dietFilter === 'all'
+                          ? 'bg-gray-800 text-white shadow-sm'
+                          : 'text-text-muted hover:text-text-dark'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDietFilter('veg')}
+                      className={`px-3 py-0.5 rounded text-[11px] font-black transition-all ${
+                        dietFilter === 'veg'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-emerald-700 hover:text-emerald-950'
+                      }`}
+                    >
+                      Veg
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDietFilter('non-veg')}
+                      className={`px-3 py-0.5 rounded text-[11px] font-black transition-all ${
+                        dietFilter === 'non-veg'
+                          ? 'bg-red-600 text-white shadow-sm'
+                          : 'text-red-700 hover:text-red-950'
+                      }`}
+                    >
+                      Non-Veg
+                    </button>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -882,7 +940,18 @@ export default function MenuSetup() {
                       <div className="flex justify-between items-start">
                         <div>
                           <h4 className="font-extrabold text-[14px] text-text-dark">{rec.name}</h4>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#f7f1ec] text-[#7a6051] mt-1 inline-block">{categoryName}</span>
+                          <div className="flex gap-1.5 mt-1 items-center">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#f7f1ec] text-[#7a6051]">{categoryName}</span>
+                            {(() => {
+                              const linkedItem = dbState.menuItems.find(item => item.id === rec.menu_item_id);
+                              const isVeg = linkedItem ? (String(linkedItem.item_type || linkedItem.food_type).toLowerCase() === 'veg') : true;
+                              return (
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                                  isVeg ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+                                }`}>{isVeg ? "Veg" : "Non-Veg"}</span>
+                              );
+                            })()}
+                          </div>
                         </div>
                         <div className="flex gap-1">
                           <button
@@ -974,8 +1043,8 @@ export default function MenuSetup() {
           {activeTab === "menu" && (
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2.5 items-center justify-between">
-                <div className="flex gap-2 flex-1 max-w-lg">
-                  <div className="relative flex-1">
+                <div className="flex gap-2 flex-1 max-w-2xl">
+                  <div className="relative flex-1 min-w-[200px]">
                     <Search size={14} className="absolute left-3 top-3 text-text-muted" />
                     <input
                       type="text"
@@ -995,6 +1064,43 @@ export default function MenuSetup() {
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
+                  
+                  {/* Veg/Non-Veg Toggles */}
+                  <div className="flex border border-[#eadfd7]/60 rounded-md p-0.5 bg-white shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setDietFilter('all')}
+                      className={`px-3 py-0.5 rounded text-[11px] font-black transition-all ${
+                        dietFilter === 'all'
+                          ? 'bg-gray-800 text-white shadow-sm'
+                          : 'text-text-muted hover:text-text-dark'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDietFilter('veg')}
+                      className={`px-3 py-0.5 rounded text-[11px] font-black transition-all ${
+                        dietFilter === 'veg'
+                          ? 'bg-emerald-600 text-white shadow-sm'
+                          : 'text-emerald-700 hover:text-emerald-950'
+                      }`}
+                    >
+                      Veg
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDietFilter('non-veg')}
+                      className={`px-3 py-0.5 rounded text-[11px] font-black transition-all ${
+                        dietFilter === 'non-veg'
+                          ? 'bg-red-600 text-white shadow-sm'
+                          : 'text-red-700 hover:text-red-950'
+                      }`}
+                    >
+                      Non-Veg
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1010,9 +1116,14 @@ export default function MenuSetup() {
                           <h4 className="font-extrabold text-[14px] text-text-dark">{item.name}</h4>
                           <div className="flex gap-1.5 mt-1 items-center">
                             <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-[#f7f1ec] text-[#7a6051] uppercase">{categoryName}</span>
-                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
-                              item.item_type === "Veg" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
-                            }`}>{item.item_type}</span>
+                            {(() => {
+                              const isVeg = String(item.item_type || item.food_type).toLowerCase() === 'veg';
+                              return (
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                                  isVeg ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+                                }`}>{isVeg ? "Veg" : "Non-Veg"}</span>
+                              );
+                            })()}
                             <span className="text-[9px] text-text-muted">({item.cost_mode === "manual" ? "Manual" : "Recipe"})</span>
                           </div>
                         </div>
