@@ -12,10 +12,12 @@ export default function CounterSales() {
   
   const [selectedTable, setSelectedTable] = useState('Restaurant'); // 'Restaurant', 'Tiffins', or 1 to 12
   const [subTab, setSubTab] = useState('All');
+  const [dietFilter, setDietFilter] = useState('all'); // 'all', 'veg', 'non-veg'
   const [cart, setCart] = useState([]); // Array of { portion_id, name, price, quantity, printed_quantity }
 
   useEffect(() => {
     setSubTab('All');
+    setDietFilter('all');
   }, [selectedTable]);
   const [activeOrders, setActiveOrders] = useState([]); // List of active held orders from DB
   const [restaurantId, setRestaurantId] = useState(null);
@@ -128,6 +130,13 @@ export default function CounterSales() {
         if (!isTiffinCat) return;
       }
 
+      // Apply Veg/Non-Veg filtering
+      if (dietFilter !== 'all') {
+        const itemType = String(menuItem.food_type).toLowerCase();
+        if (dietFilter === 'veg' && itemType !== 'veg') return;
+        if (dietFilter === 'non-veg' && itemType !== 'non_veg' && itemType !== 'non-veg') return;
+      }
+
       // Apply sub-tab category filtering
       if (subTab !== 'All') {
         const catLower = String(catName).toLowerCase();
@@ -192,7 +201,7 @@ export default function CounterSales() {
         if (orderA !== orderB) return orderA - orderB;
         return a.menuName.localeCompare(b.menuName);
       });
-  }, [portions, menuItems, selectedTable, subTab]);
+  }, [portions, menuItems, selectedTable, subTab, dietFilter]);
   // Calculate cart total
   const total = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -651,8 +660,47 @@ export default function CounterSales() {
         </div>
 
         {/* Menu Items Grid */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-black text-text-dark shrink-0">Counter Menu Items</h2>
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3 shrink-0">
+            <h2 className="text-lg font-black text-text-dark">Counter Menu Items</h2>
+            
+            {/* Veg/Non-Veg Toggles */}
+            <div className="flex border border-[#eadfd7]/60 rounded-full p-0.5 bg-white/70 backdrop-blur-md">
+              <button
+                type="button"
+                onClick={() => setDietFilter('all')}
+                className={`px-3 py-0.5 rounded-full text-[11px] font-black transition-all ${
+                  dietFilter === 'all'
+                    ? 'bg-gray-800 text-white shadow-sm'
+                    : 'text-text-muted hover:text-text-dark'
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setDietFilter('veg')}
+                className={`px-3 py-0.5 rounded-full text-[11px] font-black transition-all ${
+                  dietFilter === 'veg'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-emerald-700 hover:text-emerald-950'
+                }`}
+              >
+                Veg
+              </button>
+              <button
+                type="button"
+                onClick={() => setDietFilter('non-veg')}
+                className={`px-3 py-0.5 rounded-full text-[11px] font-black transition-all ${
+                  dietFilter === 'non-veg'
+                    ? 'bg-red-600 text-white shadow-sm'
+                    : 'text-red-700 hover:text-red-950'
+                }`}
+              >
+                Non-Veg
+              </button>
+            </div>
+          </div>
           <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none shrink-0">
             {(selectedTable === 'Restaurant' || typeof selectedTable === 'number'
               ? ['All', 'Starters', 'Biryani', 'Desserts', 'Beverages/Drinks']
