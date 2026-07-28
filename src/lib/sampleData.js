@@ -71,6 +71,7 @@ export const sampleIngredients = [
 
 export const sampleRecipes = sampleIngredients.map((ingredient) => ({
   id: uid('recipe'),
+  name: `${ingredient.name} Formula`,
   menu_item_id: 'menu-fry-piece-palav',
   ingredient_id: ingredient.id,
   base_quantity: 1,

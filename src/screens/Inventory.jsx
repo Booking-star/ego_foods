@@ -67,7 +67,11 @@ export default function Inventory() {
   // Sort recipes alphabetically
   const recipes = useInventoryStore((state) => state.recipes) || [];
   const sortedRecipes = useMemo(() => {
-    return [...recipes].sort((a, b) => a.name.localeCompare(b.name));
+    return [...recipes].filter(Boolean).sort((a, b) => {
+      const nameA = a.name || a.recipe_name || 'Unnamed Recipe';
+      const nameB = b.name || b.recipe_name || 'Unnamed Recipe';
+      return nameA.localeCompare(nameB);
+    });
   }, [recipes]);
 
   function handleInputChange(recipeId, value) {
