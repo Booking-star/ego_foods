@@ -15,9 +15,9 @@ function ingredientColor(ingredient) {
 }
 
 export default function Inventory() {
-  const menuItems = useInventoryStore((state) => state.menuItems);
-  const ingredients = useInventoryStore((state) => state.ingredients);
-  const batchLogs = useInventoryStore((state) => state.batchLogs);
+  const menuItems = useInventoryStore((state) => state.menuItems) || [];
+  const ingredients = useInventoryStore((state) => state.ingredients) || [];
+  const batchLogs = useInventoryStore((state) => state.batchLogs) || [];
   const logBatch = useInventoryStore((state) => state.logBatch);
   const updateStockAndThreshold = useInventoryStore((state) => state.updateStockAndThreshold);
   const openExpenseMode = useAppStore((state) => state.openExpenseMode);
@@ -65,7 +65,7 @@ export default function Inventory() {
   };
 
   // Sort recipes alphabetically
-  const recipes = useInventoryStore((state) => state.recipes);
+  const recipes = useInventoryStore((state) => state.recipes) || [];
   const sortedRecipes = useMemo(() => {
     return [...recipes].sort((a, b) => a.name.localeCompare(b.name));
   }, [recipes]);

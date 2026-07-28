@@ -20,6 +20,11 @@ const initialInventory = (!rawSaved || !rawSaved.menuItems || rawSaved.menuItems
     }
   : {
       ...rawSaved,
+      recipes: rawSaved.recipes || sampleRecipes || [],
+      ingredients: rawSaved.ingredients || sampleIngredients || [],
+      portions: rawSaved.portions || samplePortions || [],
+      externalMappings: rawSaved.externalMappings || sampleExternalMappings || [],
+      batchLogs: rawSaved.batchLogs || sampleBatchLogs || [],
       menuItemComponents: rawSaved.menuItemComponents || [],
       recipeComponents: rawSaved.recipeComponents || []
     };
