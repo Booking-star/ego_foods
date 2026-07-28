@@ -10,7 +10,7 @@ export default function CounterSales() {
   const portions = useInventoryStore((state) => state.portions);
   const tableCount = useAppStore((state) => state.tableCount);
   
-  const [selectedTable, setSelectedTable] = useState('Takeaway'); // 'Takeaway' or 1 to 12
+  const [selectedTable, setSelectedTable] = useState('Restaurant'); // 'Restaurant', 'Tiffins', or 1 to 12
   const [cart, setCart] = useState([]); // Array of { portion_id, name, price, quantity, printed_quantity }
   const [activeOrders, setActiveOrders] = useState([]); // List of active held orders from DB
   const [restaurantId, setRestaurantId] = useState(null);
@@ -82,8 +82,9 @@ export default function CounterSales() {
   useEffect(() => {
     const tableOrder = activeOrders.find(
       (order) =>
-        (selectedTable === 'Takeaway' && order.order_type === 'takeaway') ||
-        (selectedTable !== 'Takeaway' && order.order_type === 'dine_in' && String(order.table_number) === String(selectedTable))
+        (selectedTable === 'Restaurant' && order.order_type === 'takeaway' && order.customer_name === 'Restaurant') ||
+        (selectedTable === 'Tiffins' && order.order_type === 'takeaway' && order.customer_name === 'Tiffins') ||
+        (selectedTable !== 'Restaurant' && selectedTable !== 'Tiffins' && order.order_type === 'dine_in' && String(order.table_number) === String(selectedTable))
     );
 
     if (tableOrder) {
@@ -110,6 +111,17 @@ export default function CounterSales() {
       const menuItem = menuItems.find((item) => item.id === p.menu_item_id);
       if (!menuItem) return;
       
+      // Filter by selected branch if in takeaway mode
+      const catName = menuItem.category;
+      if (selectedTable === 'Restaurant') {
+        const isRestCat = ['veg palavs', 'non-veg palavs', 'desserts'].includes(String(catName).toLowerCase());
+        if (!isRestCat) return;
+      }
+      if (selectedTable === 'Tiffins') {
+        const isTiffinCat = ['dosa', 'parotta', 'chapathi'].includes(String(catName).toLowerCase());
+        if (!isTiffinCat) return;
+      }
+
       if (!groups[p.menu_item_id]) {
         groups[p.menu_item_id] = {
           menuItemId: p.menu_item_id,
@@ -154,7 +166,7 @@ export default function CounterSales() {
         if (orderA !== orderB) return orderA - orderB;
         return a.menuName.localeCompare(b.menuName);
       });
-  }, [portions, menuItems]);
+  }, [portions, menuItems, selectedTable]);
   // Calculate cart total
   const total = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -204,14 +216,16 @@ export default function CounterSales() {
   const currentActiveOrder = useMemo(() => {
     return activeOrders.find(
       (order) =>
-        (selectedTable === 'Takeaway' && order.order_type === 'takeaway') ||
-        (selectedTable !== 'Takeaway' && order.order_type === 'dine_in' && String(order.table_number) === String(selectedTable))
+        (selectedTable === 'Restaurant' && order.order_type === 'takeaway' && order.customer_name === 'Restaurant') ||
+        (selectedTable === 'Tiffins' && order.order_type === 'takeaway' && order.customer_name === 'Tiffins') ||
+        (selectedTable !== 'Restaurant' && selectedTable !== 'Tiffins' && order.order_type === 'dine_in' && String(order.table_number) === String(selectedTable))
     );
   }, [selectedTable, activeOrders]);
 
   // Get active customer if exists, otherwise null
   async function getCustomerIdIfExists(tableNum) {
-    const systemPhone = tableNum === 'Takeaway' ? 'takeaway' : `dinein_${tableNum}`;
+    const isTakeaway = tableNum === 'Restaurant' || tableNum === 'Tiffins';
+    const systemPhone = isTakeaway ? tableNum.toLowerCase() : `dinein_${tableNum}`;
 
     const { data: existing, error: findError } = await supabase
       .from('customers')
@@ -338,20 +352,21 @@ export default function CounterSales() {
       });
 
       const pickupCode = currentActiveOrder?.pickup_code || Math.floor(1000 + Math.random() * 9000).toString();
+      const isTakeaway = selectedTable === 'Restaurant' || selectedTable === 'Tiffins';
       const customerId = await getCustomerIdIfExists(selectedTable);
 
       const orderPayload = {
         restaurant_id: restaurantId,
         customer_id: customerId,
-        customer_name: selectedTable === 'Takeaway' ? 'Takeaway' : `Table ${selectedTable}`,
+        customer_name: isTakeaway ? selectedTable : `Table ${selectedTable}`,
         customer_phone: '',
         items: updatedItems,
         total_amount: currentCart.reduce((sum, item) => sum + item.price * item.quantity, 0),
         status: 'preparing',
         payment_confirmed: false,
         source: 'counter',
-        order_type: selectedTable === 'Takeaway' ? 'takeaway' : 'dine_in',
-        table_number: selectedTable === 'Takeaway' ? null : String(selectedTable),
+        order_type: isTakeaway ? 'takeaway' : 'dine_in',
+        table_number: isTakeaway ? null : String(selectedTable),
         pickup_code: pickupCode
       };
 
@@ -380,7 +395,7 @@ export default function CounterSales() {
         const printOrder = {
           id: orderId,
           pickup_code: pickupCode,
-          customer_name: selectedTable === 'Takeaway' ? 'Takeaway' : `Table ${selectedTable}`,
+          customer_name: isTakeaway ? selectedTable : `Table ${selectedTable}`,
           items: printItems,
           is_update: isUpdate
         };
@@ -402,10 +417,11 @@ export default function CounterSales() {
   // 5. Print Client Copy Receipt
   async function handlePrintClientCopy() {
     if (!cart.length || !window.kitchenOS?.printer?.printOrderCopies) return;
+    const isTakeaway = selectedTable === 'Restaurant' || selectedTable === 'Tiffins';
     const printOrder = {
       id: currentActiveOrder?.id || 'temp',
       pickup_code: currentActiveOrder?.pickup_code || '----',
-      customer_name: selectedTable === 'Takeaway' ? 'Takeaway' : `Table ${selectedTable}`,
+      customer_name: isTakeaway ? selectedTable : `Table ${selectedTable}`,
       items: cart,
       total_amount: total
     };
@@ -459,19 +475,20 @@ export default function CounterSales() {
         if (error) throw error;
       } else {
         const customerId = await getCustomerIdIfExists(selectedTable);
+        const isTakeaway = selectedTable === 'Restaurant' || selectedTable === 'Tiffins';
         // Insert new order directly as completed (e.g. direct Takeaway settle)
         const { error } = await supabase
           .from('orders')
           .insert({
             restaurant_id: restaurantId,
             customer_id: customerId,
-            customer_name: selectedTable === 'Takeaway' ? 'Takeaway' : `Table ${selectedTable}`,
+            customer_name: isTakeaway ? selectedTable : `Table ${selectedTable}`,
             customer_phone: '',
             items: updatedItems,
             total_amount: currentCartTotal,
             payment_confirmed: true,
-            order_type: selectedTable === 'Takeaway' ? 'takeaway' : 'dine_in',
-            table_number: selectedTable === 'Takeaway' ? null : String(selectedTable),
+            order_type: isTakeaway ? 'takeaway' : 'dine_in',
+            table_number: isTakeaway ? null : String(selectedTable),
             status: 'completed',
             pickup_code: pickupCode,
             created_at: now,
@@ -481,19 +498,20 @@ export default function CounterSales() {
       }
 
       // Log into cash/sales ledger
+      const isTakeaway = selectedTable === 'Restaurant' || selectedTable === 'Tiffins';
       await supabase.from('expenses').insert({
         restaurant_id: restaurantId,
-        type: selectedTable === 'Takeaway' ? 'Takeaway Sale' : 'Dine-In Sale',
-        description: selectedTable === 'Takeaway' ? 'Finalized Takeaway Bill' : `Finalized Table ${selectedTable} Bill`,
+        type: isTakeaway ? `${selectedTable} Takeaway` : 'Dine-In Sale',
+        description: isTakeaway ? `Finalized ${selectedTable} Takeaway Bill` : `Finalized Table ${selectedTable} Bill`,
         amount: currentCartTotal,
         date: now.split('T')[0]
       });
 
       // If takeaway, print order receipts (kitchen + customer copies) immediately!
-      if (selectedTable === 'Takeaway' && window.kitchenOS?.printer) {
+      if (isTakeaway && window.kitchenOS?.printer) {
         const orderData = {
           pickup_code: pickupCode,
-          customer_name: 'Takeaway',
+          customer_name: selectedTable,
           customer_phone: '',
           items: updatedItems,
           total_amount: currentCartTotal
@@ -501,7 +519,7 @@ export default function CounterSales() {
         await window.kitchenOS.printer.printOrderCopies(orderData, { printKitchen: true, printCustomer: true }).catch(() => {});
       }
 
-      setMessage(selectedTable === 'Takeaway' ? 'Takeaway bill settled successfully!' : `Table ${selectedTable} bill settled successfully!`);
+      setMessage(isTakeaway ? `${selectedTable} Takeaway bill settled successfully!` : `Table ${selectedTable} bill settled successfully!`);
       setCart([]);
       fetchActiveOrders();
     } catch (err) {
@@ -548,17 +566,34 @@ export default function CounterSales() {
         <div className="mb-6 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7">
           <button
             type="button"
-            onClick={() => setSelectedTable('Takeaway')}
+            onClick={() => setSelectedTable('Restaurant')}
             className={`flex flex-col items-center justify-center p-3 rounded-lg border text-[13px] font-black transition-all ${
-              selectedTable === 'Takeaway'
+              selectedTable === 'Restaurant'
                 ? 'border-primary bg-primary text-white shadow-md'
-                : activeOrders.some((o) => o.order_type === 'takeaway')
+                : activeOrders.some((o) => o.order_type === 'takeaway' && o.customer_name === 'Restaurant')
                 ? 'border-orange-300 bg-orange-50 text-orange-800'
                 : 'border-[#eadfd7]/60 bg-white/70 backdrop-blur-md text-text-dark hover:bg-white'
             }`}
           >
-            <span>Takeaway</span>
-            {activeOrders.some((o) => o.order_type === 'takeaway') && (
+            <span>Restaurant</span>
+            {activeOrders.some((o) => o.order_type === 'takeaway' && o.customer_name === 'Restaurant') && (
+              <span className="text-[10px] mt-1 font-bold">Active</span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedTable('Tiffins')}
+            className={`flex flex-col items-center justify-center p-3 rounded-lg border text-[13px] font-black transition-all ${
+              selectedTable === 'Tiffins'
+                ? 'border-primary bg-primary text-white shadow-md'
+                : activeOrders.some((o) => o.order_type === 'takeaway' && o.customer_name === 'Tiffins')
+                ? 'border-orange-300 bg-orange-50 text-orange-800'
+                : 'border-[#eadfd7]/60 bg-white/70 backdrop-blur-md text-text-dark hover:bg-white'
+            }`}
+          >
+            <span>Tiffins</span>
+            {activeOrders.some((o) => o.order_type === 'takeaway' && o.customer_name === 'Tiffins') && (
               <span className="text-[10px] mt-1 font-bold">Active</span>
             )}
           </button>
@@ -660,7 +695,7 @@ export default function CounterSales() {
       {/* Cart Summary Panel */}
       <aside className="flex flex-col border-l border-[#eadfd7]/60 bg-white/75 backdrop-blur-md p-5">
         <h2 className="text-lg font-black text-text-dark">
-          {selectedTable === 'Takeaway' ? 'Takeaway Order' : `Table ${selectedTable} Order`}
+          {selectedTable === 'Restaurant' || selectedTable === 'Tiffins' ? `${selectedTable} Takeaway` : `Table ${selectedTable} Order`}
         </h2>
         
         {/* Cart items list */}
@@ -716,7 +751,7 @@ export default function CounterSales() {
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-2">
-            {selectedTable !== 'Takeaway' && (
+            {(selectedTable !== 'Restaurant' && selectedTable !== 'Tiffins') && (
               <button
                 type="button"
                 disabled={!cart.length || loading}
@@ -731,7 +766,7 @@ export default function CounterSales() {
               disabled={!cart.length || loading}
               onClick={handlePrintClientCopy}
               className={`inline-flex items-center justify-center gap-1.5 rounded border border-[#eadfd7] py-2.5 text-xs font-black text-text-dark disabled:bg-[#f7f1ec] ${
-                selectedTable === 'Takeaway' ? 'col-span-2' : ''
+                (selectedTable === 'Restaurant' || selectedTable === 'Tiffins') ? 'col-span-2' : ''
               }`}
             >
               <ReceiptText size={15} /> Client Copy
@@ -740,7 +775,7 @@ export default function CounterSales() {
 
           <button
             type="button"
-            disabled={!cart.length || (selectedTable !== 'Takeaway' && !currentActiveOrder) || loading}
+            disabled={!cart.length || (((selectedTable !== 'Restaurant' && selectedTable !== 'Tiffins') && !currentActiveOrder) || loading)}
             onClick={() => handleSettleBill()}
             className="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded bg-emerald-600 py-2.5 text-xs font-black text-white disabled:bg-text-muted"
           >
