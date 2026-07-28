@@ -202,10 +202,10 @@ export default function Inventory() {
               type="button"
               onClick={() => {
                 const initialInputs = {};
-                sortedMenuItems.forEach((item) => {
-                  const todayBatches = batchLogs.filter((batch) => batch.date === todayISO() && batch.menu_item_id === item.id);
+                sortedRecipes.forEach((recipe) => {
+                  const todayBatches = batchLogs.filter((batch) => batch.date === todayISO() && batch.recipe_id === recipe.id);
                   const cooked = todayBatches.reduce((sum, batch) => sum + Number(batch.kg_cooked || 0), 0);
-                  initialInputs[item.id] = cooked || '';
+                  initialInputs[recipe.id] = cooked || '';
                 });
                 setBatchInputs(initialInputs);
                 setIsEditing(true);
