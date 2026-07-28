@@ -11,7 +11,12 @@ export default function CounterSales() {
   const tableCount = useAppStore((state) => state.tableCount);
   
   const [selectedTable, setSelectedTable] = useState('Restaurant'); // 'Restaurant', 'Tiffins', or 1 to 12
+  const [subTab, setSubTab] = useState('All');
   const [cart, setCart] = useState([]); // Array of { portion_id, name, price, quantity, printed_quantity }
+
+  useEffect(() => {
+    setSubTab('All');
+  }, [selectedTable]);
   const [activeOrders, setActiveOrders] = useState([]); // List of active held orders from DB
   const [restaurantId, setRestaurantId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -113,13 +118,34 @@ export default function CounterSales() {
       
       // Filter by selected branch if in takeaway mode
       const catName = menuItem.category;
-      if (selectedTable === 'Restaurant') {
-        const isRestCat = ['veg palavs', 'non-veg palavs', 'desserts'].includes(String(catName).toLowerCase());
+      const isRestaurantActive = selectedTable === 'Restaurant' || typeof selectedTable === 'number';
+      if (isRestaurantActive) {
+        const isRestCat = ['veg palavs', 'non-veg palavs', 'desserts', 'starters', 'drinks', 'beverages'].some(c => String(catName).toLowerCase().includes(c));
         if (!isRestCat) return;
       }
       if (selectedTable === 'Tiffins') {
-        const isTiffinCat = ['dosa', 'parotta', 'chapathi'].includes(String(catName).toLowerCase());
+        const isTiffinCat = ['dosa', 'parotta', 'chapathi', 'drinks', 'beverages'].some(c => String(catName).toLowerCase().includes(c));
         if (!isTiffinCat) return;
+      }
+
+      // Apply sub-tab category filtering
+      if (subTab !== 'All') {
+        const catLower = String(catName).toLowerCase();
+        if (subTab === 'Starters') {
+          if (!catLower.includes('starter')) return;
+        } else if (subTab === 'Biryani') {
+          if (!catLower.includes('palav') && !catLower.includes('biryani')) return;
+        } else if (subTab === 'Desserts') {
+          if (!catLower.includes('dessert')) return;
+        } else if (subTab === 'Beverages/Drinks' || subTab === 'Drinks') {
+          if (!catLower.includes('drink') && !catLower.includes('beverage')) return;
+        } else if (subTab === 'Chapathi') {
+          if (!catLower.includes('chapathi') && !catLower.includes('chapati')) return;
+        } else if (subTab === 'Parotta') {
+          if (!catLower.includes('parotta') && !catLower.includes('parota')) return;
+        } else if (subTab === 'Dosa') {
+          if (!catLower.includes('dosa')) return;
+        }
       }
 
       if (!groups[p.menu_item_id]) {
@@ -166,7 +192,7 @@ export default function CounterSales() {
         if (orderA !== orderB) return orderA - orderB;
         return a.menuName.localeCompare(b.menuName);
       });
-  }, [portions, menuItems, selectedTable]);
+  }, [portions, menuItems, selectedTable, subTab]);
   // Calculate cart total
   const total = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -598,7 +624,7 @@ export default function CounterSales() {
             )}
           </button>
 
-          {Array.from({ length: tableCount }, (_, i) => i + 1).map((num) => {
+          {Array.from({ length: 4 }, (_, i) => i + 1).map((num) => {
             const tableOrder = activeOrders.find(
               (o) => o.order_type === 'dine_in' && String(o.table_number) === String(num)
             );
@@ -625,7 +651,28 @@ export default function CounterSales() {
         </div>
 
         {/* Menu Items Grid */}
-        <h2 className="mb-3 text-lg font-black text-text-dark">Counter Menu Items</h2>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-lg font-black text-text-dark shrink-0">Counter Menu Items</h2>
+          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none shrink-0">
+            {(selectedTable === 'Restaurant' || typeof selectedTable === 'number'
+              ? ['All', 'Starters', 'Biryani', 'Desserts', 'Beverages/Drinks']
+              : ['All', 'Chapathi', 'Parotta', 'Dosa', 'Drinks']
+            ).map((tabName) => (
+              <button
+                key={tabName}
+                type="button"
+                onClick={() => setSubTab(tabName)}
+                className={`px-3 py-1 rounded-full text-xs font-black transition-all border ${
+                  subTab === tabName
+                    ? 'border-primary bg-primary text-white shadow-sm'
+                    : 'border-[#eadfd7]/60 bg-white/70 backdrop-blur-md text-text-dark hover:bg-white'
+                }`}
+              >
+                {tabName}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {menuCards.map((card) => (
             <div key={card.menuItemId} className={`rounded-xl border bg-white/70 backdrop-blur-md p-4 shadow-sm relative transition-all hover:shadow-md ${
