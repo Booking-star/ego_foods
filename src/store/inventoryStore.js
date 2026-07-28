@@ -7,7 +7,7 @@ import { readLocal, writeLocal } from '../lib/localPersist';
 
 const inventoryKey = 'kitchen-os.inventory.v2';
 const rawSaved = readLocal(inventoryKey, null);
-const initialInventory = (!rawSaved || !rawSaved.menuItems || rawSaved.menuItems.length < sampleMenuItems.length)
+const initialInventory = (!rawSaved || !rawSaved.menuItems || !Array.isArray(rawSaved.menuItems) || rawSaved.menuItems.length < sampleMenuItems.length)
   ? {
       menuItems: sampleMenuItems,
       portions: samplePortions,
@@ -20,13 +20,13 @@ const initialInventory = (!rawSaved || !rawSaved.menuItems || rawSaved.menuItems
     }
   : {
       ...rawSaved,
-      recipes: rawSaved.recipes || sampleRecipes || [],
-      ingredients: rawSaved.ingredients || sampleIngredients || [],
-      portions: rawSaved.portions || samplePortions || [],
-      externalMappings: rawSaved.externalMappings || sampleExternalMappings || [],
-      batchLogs: rawSaved.batchLogs || sampleBatchLogs || [],
-      menuItemComponents: rawSaved.menuItemComponents || [],
-      recipeComponents: rawSaved.recipeComponents || []
+      recipes: Array.isArray(rawSaved.recipes) ? rawSaved.recipes : sampleRecipes || [],
+      ingredients: Array.isArray(rawSaved.ingredients) ? rawSaved.ingredients : sampleIngredients || [],
+      portions: Array.isArray(rawSaved.portions) ? rawSaved.portions : samplePortions || [],
+      externalMappings: Array.isArray(rawSaved.externalMappings) ? rawSaved.externalMappings : sampleExternalMappings || [],
+      batchLogs: Array.isArray(rawSaved.batchLogs) ? rawSaved.batchLogs : sampleBatchLogs || [],
+      menuItemComponents: Array.isArray(rawSaved.menuItemComponents) ? rawSaved.menuItemComponents : [],
+      recipeComponents: Array.isArray(rawSaved.recipeComponents) ? rawSaved.recipeComponents : []
     };
 
 function persistInventory(state) {

@@ -48,8 +48,8 @@ export default function Inventory() {
     const lastAlertDate = localStorage.getItem('kitchen-os.low-stock-alert-date');
     const today = todayISO();
     
-    if (lastAlertDate !== today && ingredients.length > 0) {
-      const lowItems = ingredients.filter(
+    if (lastAlertDate !== today && (ingredients || []).length > 0) {
+      const lowItems = (ingredients || []).filter(Boolean).filter(
         (ing) => Number(ing.current_stock || 0) <= Number(ing.low_stock_threshold || 0)
       );
       if (lowItems.length > 0) {
@@ -202,8 +202,8 @@ export default function Inventory() {
               type="button"
               onClick={() => {
                 const initialInputs = {};
-                sortedRecipes.forEach((recipe) => {
-                  const todayBatches = batchLogs.filter((batch) => batch.date === todayISO() && batch.recipe_id === recipe.id);
+                (sortedRecipes || []).filter(Boolean).forEach((recipe) => {
+                  const todayBatches = (batchLogs || []).filter(Boolean).filter((batch) => batch.date === todayISO() && batch.recipe_id === recipe.id);
                   const cooked = todayBatches.reduce((sum, batch) => sum + Number(batch.kg_cooked || 0), 0);
                   initialInputs[recipe.id] = cooked || '';
                 });
@@ -230,8 +230,8 @@ export default function Inventory() {
                 </tr>
               </thead>
               <tbody>
-                {sortedRecipes.map((recipe) => {
-                  const todayBatches = batchLogs.filter((batch) => batch.date === todayISO() && batch.recipe_id === recipe.id);
+                {(sortedRecipes || []).filter(Boolean).map((recipe) => {
+                  const todayBatches = (batchLogs || []).filter(Boolean).filter((batch) => batch.date === todayISO() && batch.recipe_id === recipe.id);
                   const cooked = todayBatches.reduce((sum, batch) => sum + Number(batch.kg_cooked || 0), 0);
                   const available = Number(recipe.current_stock || 0);
                   
