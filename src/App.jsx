@@ -484,7 +484,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen min-h-[680px] w-screen overflow-y-auto overflow-x-hidden bg-gradient-to-br from-[#fdfcfb] via-[#f5ede6] to-[#eeddd0] text-text-dark" data-app-scroll>
+    <div className="flex h-screen min-h-[680px] w-screen overflow-y-auto overflow-x-hidden bg-gradient-to-br from-[#fdfcfb]/45 via-[#f5ede6]/45 to-[#eeddd0]/45 text-text-dark" data-app-scroll>
       {/* Edge trigger zone for auto-hide hover reveal */}
       {!isSidebarPinned && (
         <div
