@@ -174,30 +174,22 @@ export default function MenuSetup() {
   const handleSaveIngredient = async () => {
     if (!activeIngredient || !activeIngredient.name || !dbState) return;
     try {
-      let qtyBase = 1;
-      const unit = (activeIngredient.purchase_unit || "kg").toLowerCase();
-      if (["kg", "kilogram", "kilograms"].includes(unit)) qtyBase = activeIngredient.purchase_quantity * 1000;
-      else if (["l", "litre", "litres", "liter", "liters"].includes(unit)) qtyBase = activeIngredient.purchase_quantity * 1000;
-      else if (["dozen", "dozens"].includes(unit)) qtyBase = activeIngredient.purchase_quantity * 12;
-      else qtyBase = activeIngredient.purchase_quantity;
-
-      const costPerBaseUnit = activeIngredient.purchase_price / (qtyBase || 1);
-
-      const nextStock = Number(activeIngredient.purchase_quantity || 0);
+      const costPerBaseUnit = Number(activeIngredient.cost_per_base_unit || 0);
+      const targetUnit = activeIngredient.unit || activeIngredient.purchase_unit || "kg";
 
       const row = {
         restaurant_id: dbState.restaurantId,
         category_id: activeIngredient.category_id || null,
         name: activeIngredient.name.trim(),
-        purchase_price: activeIngredient.purchase_price,
-        purchase_quantity: activeIngredient.purchase_quantity,
-        purchase_unit: activeIngredient.purchase_unit,
-        base_unit: getBaseUnitLabel(activeIngredient.purchase_unit || "kg"),
+        purchase_price: Number(activeIngredient.purchase_price || 0),
+        purchase_quantity: Number(activeIngredient.purchase_quantity || 1),
+        purchase_unit: targetUnit,
+        base_unit: getBaseUnitLabel(targetUnit),
+        unit: targetUnit,
         cost_per_base_unit: costPerBaseUnit,
         supplier_name: activeIngredient.supplier_name || null,
         notes: activeIngredient.notes || null,
-        current_stock: nextStock,
-        low_stock_threshold: activeIngredient.low_stock_threshold || 1,
+        low_stock_threshold: Number(activeIngredient.low_stock_threshold || 1),
         is_active: activeIngredient.is_active ?? true
       };
 
@@ -769,9 +761,9 @@ export default function MenuSetup() {
                   type="button"
                   onClick={() => {
                     setActiveIngredient({
-                      purchase_price: 0,
-                      purchase_quantity: 1,
-                      purchase_unit: "kg",
+                      cost_per_base_unit: 0,
+                      low_stock_threshold: 1,
+                      unit: "kg",
                       is_active: true
                     });
                     setIngredientModalOpen(true);
@@ -812,22 +804,18 @@ export default function MenuSetup() {
                           </button>
                         </div>
                       </div>
-                      <div className="mt-4 grid grid-cols-2 gap-2 text-xs border-t pt-3 border-dashed border-[#eadfd7]">
+                      <div className="mt-4 grid grid-cols-3 gap-2 text-xs border-t pt-3 border-dashed border-[#eadfd7]">
                         <div>
-                          <p className="text-text-muted uppercase text-[9px] font-bold">Purchase Cost</p>
-                          <p className="font-black text-text-dark mt-0.5">{formatINR(ing.purchase_price)}</p>
+                          <p className="text-text-muted uppercase text-[9px] font-bold">Unit Cost</p>
+                          <p className="font-black text-primary mt-0.5">{formatBaseUnitCost(ing.cost_per_base_unit)} / {ing.unit || ing.base_unit || "kg"}</p>
                         </div>
                         <div>
-                          <p className="text-text-muted uppercase text-[9px] font-bold">Purchase Volume</p>
-                          <p className="font-bold text-text-dark mt-0.5">{ing.purchase_quantity} {ing.purchase_unit}</p>
+                          <p className="text-text-muted uppercase text-[9px] font-bold">Current Stock</p>
+                          <p className="font-black text-text-dark mt-0.5">{ing.current_stock ?? 0} {ing.unit || ing.base_unit || "kg"}</p>
                         </div>
                         <div>
-                          <p className="text-text-muted uppercase text-[9px] font-bold">Base Unit Cost</p>
-                          <p className="font-black text-primary mt-0.5">{formatBaseUnitCost(ing.cost_per_base_unit)} / {ing.base_unit}</p>
-                        </div>
-                        <div>
-                          <p className="text-text-muted uppercase text-[9px] font-bold">Supplier</p>
-                          <p className="font-bold text-text-dark mt-0.5 truncate">{ing.supplier_name || "N/A"}</p>
+                          <p className="text-text-muted uppercase text-[9px] font-bold">Alert Threshold</p>
+                          <p className="font-bold text-text-dark mt-0.5">{ing.low_stock_threshold ?? 0} {ing.unit || ing.base_unit || "kg"}</p>
                         </div>
                       </div>
                     </div>
@@ -1368,10 +1356,10 @@ export default function MenuSetup() {
                   </select>
                 </div>
                 <div className="grid gap-1">
-                  <label className="text-xs font-black text-text-muted uppercase">Purchase Unit</label>
+                  <label className="text-xs font-black text-text-muted uppercase">Base Unit</label>
                   <select
-                    value={activeIngredient.purchase_unit || "kg"}
-                    onChange={(e) => setActiveIngredient({ ...activeIngredient, purchase_unit: e.target.value })}
+                    value={activeIngredient.unit || activeIngredient.purchase_unit || "kg"}
+                    onChange={(e) => setActiveIngredient({ ...activeIngredient, unit: e.target.value, purchase_unit: e.target.value })}
                     className="h-9 rounded border border-[#eadfd7] bg-white px-2 text-xs font-bold text-text-dark outline-none"
                   >
                     <option value="kg">kg</option>
@@ -1387,38 +1375,25 @@ export default function MenuSetup() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-1">
-                  <label className="text-xs font-black text-text-muted uppercase">Purchase Qty</label>
+                  <label className="text-xs font-black text-text-muted uppercase">Cost per Base Unit (₹)</label>
                   <input
                     type="number"
-                    value={activeIngredient.purchase_quantity !== undefined && activeIngredient.purchase_quantity !== null ? activeIngredient.purchase_quantity : ""}
-                    onChange={(e) => setActiveIngredient({ ...activeIngredient, purchase_quantity: e.target.value })}
+                    step="any"
+                    value={activeIngredient.cost_per_base_unit !== undefined && activeIngredient.cost_per_base_unit !== null ? activeIngredient.cost_per_base_unit : ""}
+                    onChange={(e) => setActiveIngredient({ ...activeIngredient, cost_per_base_unit: e.target.value })}
                     className="h-9 rounded border border-[#eadfd7] bg-white px-3 text-xs font-bold text-text-dark outline-none"
                   />
                 </div>
                 <div className="grid gap-1">
-                  <label className="text-xs font-black text-text-muted uppercase">Purchase Price (₹)</label>
+                  <label className="text-xs font-black text-text-muted uppercase">Low Stock Threshold</label>
                   <input
                     type="number"
-                    value={activeIngredient.purchase_price !== undefined && activeIngredient.purchase_price !== null ? activeIngredient.purchase_price : ""}
-                    onChange={(e) => setActiveIngredient({ ...activeIngredient, purchase_price: e.target.value })}
+                    step="any"
+                    value={activeIngredient.low_stock_threshold !== undefined && activeIngredient.low_stock_threshold !== null ? activeIngredient.low_stock_threshold : ""}
+                    onChange={(e) => setActiveIngredient({ ...activeIngredient, low_stock_threshold: e.target.value })}
                     className="h-9 rounded border border-[#eadfd7] bg-white px-3 text-xs font-bold text-text-dark outline-none"
                   />
                 </div>
-              </div>
-
-              <div className="bg-[#fffcf9] p-3 border border-[#f0e4db] rounded text-xs text-text-muted">
-                Calculated Base Cost: <b>{formatBaseUnitCost(Number(activeIngredient.purchase_price || 0) / (Number(activeIngredient.purchase_quantity || 1) * getUnitBaseFactor(activeIngredient.purchase_unit || "kg")))}</b> per <b>{getBaseUnitLabel(activeIngredient.purchase_unit || "kg")}</b>
-              </div>
-
-              <div className="grid gap-1">
-                <label className="text-xs font-black text-text-muted uppercase">Supplier Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Metro wholesale"
-                  value={activeIngredient.supplier_name || ""}
-                  onChange={(e) => setActiveIngredient({ ...activeIngredient, supplier_name: e.target.value })}
-                  className="h-9 rounded border border-[#eadfd7] bg-white px-3 text-xs font-bold text-text-dark outline-none focus:border-primary"
-                />
               </div>
             </div>
 
